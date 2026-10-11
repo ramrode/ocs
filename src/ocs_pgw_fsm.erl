@@ -106,12 +106,14 @@ init([ServiceName, ServerAddress, ServerPort, ClientAddress,
 		{ok, HH} ->
 			HH
 	end,
-	{ok, idle, #statedata{service = ServiceName,
+	Action = {timeout, ?TIMEOUT, timeout},
+	Data = #statedata{service = ServiceName,
 			server_address = ServerAddress, server_port = ServerPort,
 			client_address = ClientAddress, client_port = ClientPort,
 			session_id = SessionId,
 			orig_host = OriginHost, orig_realm = OriginRealm,
-			hss_realm = HssRealm, hss_host = HssHost}}.
+			hss_realm = HssRealm, hss_host = HssHost},
+	{ok, idle, Data, Action}.
 
 -spec idle(EventType, EventContent, Data) -> Result
 	when
@@ -153,7 +155,12 @@ idle({call, From} = _EventType,
 			'Origin-Realm' = OriginRealm},
 	ok = ocs_log:auth_log(diameter, Server, Client, EventContent, Answer),
 	ReplyAction = {reply, From, Answer},
-	{stop_and_reply, shutdown, ReplyAction, NewData}.
+	{stop_and_reply, shutdown, ReplyAction, NewData};
+idle(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
+idle(timeout = _EventType, timeout = _EventContent, _Data) ->
+	{stop, shutdown}.
 %% @hidden
 idle1(true = _GTPv2Enabled,
 		#'3gpp_s6b_AAR'{'User-Name' = [Identity], 'Session-Id' = SessionId,
@@ -291,6 +298,9 @@ register(cast = _EventType,
 	ResultCode2 = ?'DIAMETER_BASE_RESULT-CODE_UNABLE_TO_COMPLY',
 	ReplyAction = {reply, From, response(ResultCode2, Data)},
 	{stop_and_reply, shutdown, ReplyAction};
+register(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
 register(timeout = _EventType, timeout = _EventContent,
 		#statedata{from = From, session_id = SessionId,
 		hss_host = HssHost, hss_realm = HssRealm,
@@ -398,6 +408,9 @@ profile(cast = _EventType,
 	ResultCode2 = ?'DIAMETER_BASE_RESULT-CODE_UNABLE_TO_COMPLY',
 	ReplyAction = {reply, From, response(ResultCode2, Data)},
 	{stop_and_reply, shutdown, ReplyAction};
+profile(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
 profile(timeout = _EventType, timeout = _EventContent,
 		#statedata{from = From, session_id = SessionId,
 		hss_host = HssHost, hss_realm = HssRealm,

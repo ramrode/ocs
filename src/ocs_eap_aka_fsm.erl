@@ -470,9 +470,6 @@ eap_start1(EapMessage, RAT, #statedata{sup = Sup, eap_id = EapID,
 %% @@see //stdlib/gen_statem:StateName/3
 %% @private
 %%
-identity(timeout = _EventType, _EventContent,
-		#statedata{session_id = SessionId} = _Data) ->
-	{stop, {shutdown, SessionId}};
 identity(cast = _EventType,
 		{#radius{id = RadiusID, authenticator = RequestAuthenticator,
 			attributes = RequestAttributes} = Request, RadiusFsm},
@@ -535,7 +532,13 @@ identity(cast = _EventType,
 identity(cast = _EventType,
 		#'3gpp_swm_DER'{'EAP-Payload' = EapMessage,
 				'RAT-Type' = [RAT]} = Request, Data) ->
-	identity1(EapMessage, RAT, Data#statedata{request = Request}).
+	identity1(EapMessage, RAT, Data#statedata{request = Request});
+identity(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
+identity(timeout = _EventType, _EventContent,
+		#statedata{session_id = SessionId} = _Data) ->
+	{stop, {shutdown, SessionId}}.
 %% @hidden
 identity1(EapMessage, RAT,
 		#statedata{eap_id = EapID, session_id = SessionId,
@@ -597,9 +600,6 @@ identity1(EapMessage, RAT,
 %% @@see //stdlib/gen_statem:StateName/3
 %% @private
 %%
-vector(timeout = _EventType, _EventContent,
-		#statedata{session_id = SessionId} = _Data) ->
-	{stop, {shutdown, SessionId}};
 vector(cast = _EventType, {ok, {RAND, AUTN, CK, IK, XRES}},
 		#statedata{eap_id = EapID,
 		request = #radius{code = ?AccessRequest, id = RadiusID,
@@ -693,7 +693,13 @@ vector(cast = _EventType, {error, _Reason},
 			?'DIAMETER_BASE_RESULT-CODE_MULTI_ROUND_AUTH',
 			EapMessage, PortServer, Request, undefined, NewData),
 	Action = {timeout, ?TIMEOUT, timeout},
-	{next_state, failure, NewData, Action}.
+	{next_state, failure, NewData, Action};
+vector(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
+vector(timeout = _EventType, _EventContent,
+		#statedata{session_id = SessionId} = _Data) ->
+	{stop, {shutdown, SessionId}}.
 
 -spec challenge(EventType, EventContent, Data) -> Result
 	when
@@ -705,9 +711,6 @@ vector(cast = _EventType, {error, _Reason},
 %% @@see //stdlib/gen_statem:StateName/3
 %% @private
 %%
-challenge(timeout = _EventType, _EventContent,
-		#statedata{session_id = SessionId} = _Data) ->
-	{stop, {shutdown, SessionId}};
 challenge(cast = _EventType,
 		{#radius{id = RadiusID, authenticator = RequestAuthenticator,
 				attributes = RequestAttributes} = Request, RadiusFsm},
@@ -825,7 +828,13 @@ challenge(cast = _EventType,
 challenge(cast = _EventType,
 		#'3gpp_swm_DER'{'EAP-Payload' = EapMessage,
 				'RAT-Type' = []} = Request, Data) ->
-	challenge1(EapMessage, Request, 1, Data).
+	challenge1(EapMessage, Request, 1, Data);
+challenge(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
+challenge(timeout = _EventType, _EventContent,
+		#statedata{session_id = SessionId} = _Data) ->
+	{stop, {shutdown, SessionId}}.
 %% @hidden
 challenge1(EapMessage1, Request, RAT,
 		#statedata{eap_id = EapID, session_id = SessionId,
@@ -931,9 +940,6 @@ challenge1(EapMessage1, Request, RAT,
 %% @@see //stdlib/gen_statem:StateName/3
 %% @private
 %%
-register(timeout = _EventType, _EventContent,
-		#statedata{session_id = SessionId} = _Data) ->
-	{stop, {shutdown, SessionId}};
 register(cast = _EventType,
 		{ok, #'3gpp_swx_Non-3GPP-User-Data'{} = UserProfile,
 				HssRealm, HssHost},
@@ -1017,7 +1023,13 @@ register(cast = _EventType, {error, _Reason},
 			?'DIAMETER_BASE_RESULT-CODE_MULTI_ROUND_AUTH',
 			EapMessage, PortServer, Request, undefined, NewData),
 	Action = {timeout, ?TIMEOUT, timeout},
-	{next_state, failure, NewData, Action}.
+	{next_state, failure, NewData, Action};
+register(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
+register(timeout = _EventType, _EventContent,
+		#statedata{session_id = SessionId} = _Data) ->
+	{stop, {shutdown, SessionId}}.
 
 -spec failure(EventType, EventContent, Data) -> Result
 	when
@@ -1029,9 +1041,6 @@ register(cast = _EventType, {error, _Reason},
 %% @@see //stdlib/gen_statem:StateName/3
 %% @private
 %%
-failure(timeout = _EventType, _EventContent,
-		#statedata{session_id = SessionId} = _Data) ->
-	{stop, {shutdown, SessionId}};
 failure(cast = _EventType,
 		{#radius{id = RadiusID, authenticator = RequestAuthenticator,
 				attributes = RequestAttributes} = Request, RadiusFsm},
@@ -1075,7 +1084,13 @@ failure(cast = _EventType,
 failure(cast = _EventType,
 		#'3gpp_swm_DER'{'EAP-Payload' = EapMessage} = Request,
 		Data) ->
-	failure1(EapMessage, Request, Data).
+	failure1(EapMessage, Request, Data);
+failure(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
+failure(timeout = _EventType, _EventContent,
+		#statedata{session_id = SessionId} = _Data) ->
+	{stop, {shutdown, SessionId}}.
 %% @hidden
 failure1(EapMessage1, Request, #statedata{eap_id = EapID,
 		session_id = SessionId, auth_req_type = AuthReqType,

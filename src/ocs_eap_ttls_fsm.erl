@@ -243,6 +243,9 @@ ssl_start(cast = _EventType, {ssl_pid, SslPid}, Data) ->
 	NewData = Data#statedata{ssl_pid = SslPid},
 	Action = {next_event, internal, start},
 	{next_state, eap_start, NewData, Action};
+ssl_start(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
 ssl_start(timeout = _EventType, timeout = _EventContent,
 		#statedata{session_id = SessionID} = _Data) ->
 	{stop, {shutdown, SessionID}}.
@@ -570,6 +573,9 @@ client_hello(cast = _EventType,
 					NewData),
 			{stop, {shutdown, SessionID}, NewData}
 	end;
+client_hello(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
 client_hello(timeout = _EventType, timeout = _EventContent,
 		#statedata{session_id = SessionID} = _Data) ->
 	{stop, {shutdown, SessionID}}.
@@ -666,6 +672,9 @@ server_hello(cast = _EventType,
 					OH, OR, EapPacket, PortServer, Request, Data),
 			{stop, {shutdown, SessionID}}
 	end;
+server_hello(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
 server_hello(timeout = _EventType, timeout = _EventContent,
 		#statedata{session_id = SessionID, tx_buf = <<>>} = _Data) ->
 	{stop, {shutdown, SessionID}};
@@ -888,6 +897,9 @@ client_cipher(cast = _EventType,
 					OH, OR, EapPacket2, PortServer, Request, Data),
 			{stop, {shutdown, SessionID}}
 	end;
+client_cipher(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
 client_cipher(timeout = _EventType, timeout = _EventContent,
 		#statedata{session_id = SessionID} = _Data) ->
 	{stop, {shutdown, SessionID}}.
@@ -907,6 +919,9 @@ server_cipher(cast = _EventType,
 		Data) ->
 	NewData = Data#statedata{ssl_pid = SslPid},
 	server_cipher1(TlsData, NewData);
+server_cipher(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
 server_cipher(timeout = _EventType, timeout = _EventContent,
 		#statedata{session_id = SessionID} = _Data) ->
 	{stop, {shutdown, SessionID}}.
@@ -973,6 +988,9 @@ finish(cast = _EventType,
 			#diameter_eap_app_DER{}, Data),
 	NewData = Data#statedata{eap_id = NewEapID, tx_buf = <<>>},
 	{next_state, client_passthrough, NewData};
+finish(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
 finish(timeout = _EventType, timeout = _EventContent,
 		#statedata{session_id = SessionID} = _Data) ->
 	{stop, {shutdown, SessionID}}.
@@ -1075,6 +1093,9 @@ client_passthrough(cast = _EventType,
 					OH, OR, EapPacket1, PortServer, Request, Data),
 			{stop, {shutdown, SessionID}}
 	end;
+client_passthrough(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
 client_passthrough(timeout = _EventType, timeout = _EventContent,
 		#statedata{session_id = SessionID} = _Data) ->
 	{stop, {shutdown, SessionID}}.
@@ -1175,6 +1196,9 @@ server_passthrough(cast = _EventType, reject,
 			OH, OR, EapPacket, PortServer, #diameter_eap_app_DER{},
 			Data),
 	{stop, {shutdown, SessionID}};
+server_passthrough(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
 server_passthrough(timeout = _EventType, timeout = _EventContent,
 		#statedata{session_id = SessionID} = _Data) ->
 	{stop, {shutdown, SessionID}}.

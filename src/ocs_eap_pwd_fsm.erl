@@ -414,6 +414,9 @@ id(cast = _EventType,
 					OHost, ORealm, EapPacket, PortServer, Request, Data),
 			{stop, {shutdown, SessionID}}
 	end;
+id(info = _EventType, _EventContent,
+		#statedata{session_id = SessionID} = _Data) ->
+	{stop, {shutdown, SessionID}};
 id(timeout = _EventType, timeout = _EventContent,
 		#statedata{session_id = SessionID} = _Data) ->
 	{stop, {shutdown, SessionID}}.

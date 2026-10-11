@@ -105,11 +105,13 @@ init([ServiceName, ServerAddress, ServerPort, ClientAddress,
 		ClientPort, SessionId, OriginHost, OriginRealm,
 		_DestinationHost, _DestinationRealm] = _Args) ->
 	process_flag(trap_exit, true),
-	{ok, idle, #statedata{service = ServiceName,
+	Action = {timeout, ?TIMEOUT, timeout},
+	Data = #statedata{service = ServiceName,
 			server_address = ServerAddress, server_port = ServerPort,
 			client_address = ClientAddress, client_port = ClientPort,
 			session_id = SessionId,
-			origin_host = OriginHost, origin_realm = OriginRealm}}.
+			origin_host = OriginHost, origin_realm = OriginRealm},
+	{ok, idle, Data, Action}.
 
 -spec idle(EventType, EventContent, Data) -> Result
 	when
@@ -194,7 +196,12 @@ idle({call, From} = _EventType, EventContent,
 			Response = response(ResultCode, NewData),
 			ReplyAction = {reply, From, Response},
 			{stop_and_reply, shutdown, ReplyAction, NewData}
-	end.
+	end;
+idle(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
+idle(timeout = _EventType, timeout = _EventContent, _Data) ->
+	{stop, shutdown}.
 
 -spec deregister(EventType, EventContent, Data) -> Result
 	when
@@ -279,6 +286,9 @@ deregister(cast = _EventType, {error, Reason},
 			{session, SessionId}, {reason, Reason}]),
 	ResultCode2 = ?'DIAMETER_BASE_RESULT-CODE_UNABLE_TO_COMPLY',
 	deregister1(response(ResultCode2, Data), Data);
+deregister(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
 deregister(timeout, send,
 		#statedata{session_id = SessionId, imsi = IMSI,
 				identity = Identity, nas_realm = NasRealm,
@@ -290,7 +300,9 @@ deregister(timeout, send,
 			{imsi, IMSI}, {identity, Identity},
 			{session, SessionId}]),
 	ResultCode = ?'DIAMETER_BASE_RESULT-CODE_UNABLE_TO_COMPLY',
-	deregister1(response(ResultCode, Data), Data).
+	deregister1(response(ResultCode, Data), Data);
+deregister(timeout = _EventType, timeout = _EventContent, _Data) ->
+	{stop, shutdown}.
 
 %% @hidden
 deregister1(Response,

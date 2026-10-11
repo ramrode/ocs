@@ -290,7 +290,9 @@ idle(cast = _EventType,
 			{next_state, register, Data, Action};
 		{error, Reason} ->
 			{stop, Reason}
-	end.
+	end;
+idle(info = _EventType, _EventContent, _Data) ->
+	keep_state_and_data.
 %% @hidden
 idle1({ok, #service{enabled = false}},
 		#statedata{aka_fsm = AkaFsm} = _Data) ->
@@ -485,7 +487,9 @@ vector(cast = _EventType, {error, Reason},
 vector(timeout = _EventType,  timeout = _EventContent,
 		#statedata{aka_fsm = AkaFsm} = Data) ->
 	gen_statem:cast(AkaFsm, {error, timeout}),
-	{next_state, idle, Data}.
+	{next_state, idle, Data};
+vector(info = _EventType, _EventContent, _Data) ->
+	keep_state_and_data.
 
 -spec register(EventType, EventContent, Data) -> Result
 	when
@@ -530,7 +534,9 @@ register(cast = _EventType, {error, Reason},
 register(timeout = _EventType,  timeout = _EventContent,
 		#statedata{aka_fsm = AkaFsm} = Data) ->
 	gen_statem:cast(AkaFsm, {error, timeout}),
-	{next_state, idle, Data}.
+	{next_state, idle, Data};
+register(info = _EventType, _EventContent, _Data) ->
+	keep_state_and_data.
 
 -spec terminate(Reason, State, Data) -> any()
 	when

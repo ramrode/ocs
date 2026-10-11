@@ -119,10 +119,12 @@ init([ServiceName, ServerAddress, ServerPort, ClientAddress,
 		ClientPort, SessionId, OriginHost, OriginRealm,
 		_DestinationHost, _DestinationRealm] = _Args) ->
 	process_flag(trap_exit, true),
-	{ok, idle, #statedata{service = ServiceName, session_id = SessionId,
+	Data = #statedata{service = ServiceName, session_id = SessionId,
 			server_address = ServerAddress, server_port = ServerPort,
 			client_address = ClientAddress, client_port = ClientPort,
-			origin_host = OriginHost, origin_realm = OriginRealm}}.
+			origin_host = OriginHost, origin_realm = OriginRealm},
+	Action = {timeout, ?TIMEOUT, timeout},
+	{ok, idle, Data, Action}.
 
 -spec idle(EventType, EventContent, Data) -> Result
 	when
@@ -172,7 +174,12 @@ idle({call, From} = _EventType,
 			ResultCode = ?'DIAMETER_BASE_RESULT-CODE_UNABLE_TO_COMPLY',
 			ReplyAction = {reply, From, response(ResultCode, NewData)},
 			{stop_and_reply, shutdown, ReplyAction, NewData}
-	end.
+	end;
+idle(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
+idle(timeout = _EventType, timeout = _EventContent, _Data) ->
+	{stop, shutdown}.
 
 -spec abort(EventType, EventContent, Data) -> Result
 	when
@@ -281,6 +288,9 @@ abort(info = _EventType,
 			TimeoutAction = {timeout, ?TIMEOUT, timeout},
 			{next_state, abort, NewData, TimeoutAction}
 	end;
+abort(info = _EventType, _EventContent, _Data) ->
+	Action = {timeout, ?TIMEOUT, timeout},
+	{keep_state_and_data, Action};
 abort(timeout = _EventType, timeout = _EventContent,
 		#statedata{sessions = []} = _Data) ->
 	{stop, shutdown}.
