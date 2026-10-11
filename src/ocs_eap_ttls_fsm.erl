@@ -102,7 +102,9 @@
 		trusted :: boolean(),
 		service_type :: undefined | integer()}).
 -type statedata() :: #statedata{}.
--type state() :: idle.
+-type state() :: ssl_start | eap_start | client_hello | server_hello
+		| client_cipher | server_cipher | finish
+		| client_passthrough | server_passthrough.
 
 -define(TIMEOUT, 30000).
 -define(BufTIMEOUT, 100).

@@ -50,7 +50,7 @@
 		 request :: undefined | binary(),
 		 attributes :: radius_attributes:attributes()}).
 -type statedata() :: #statedata{}.
--type state() :: idle.
+-type state() :: send_request | receive_response.
 
 -define(TIMEOUT, 30000).
 -define(ERRORLOG, radius_disconnect_error).

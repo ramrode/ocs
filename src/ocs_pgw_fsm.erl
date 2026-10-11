@@ -70,7 +70,7 @@
 		apn_name :: string() | undefined,
 		from :: gen_statem:from() | undefined}).
 -type statedata() :: #statedata{}.
--type state() :: idle.
+-type state() :: idle | register | profile.
 
 %%----------------------------------------------------------------------
 %%  The ocs_pgw_fsm gen_statem call backs

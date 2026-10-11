@@ -69,7 +69,7 @@
 		session_id :: string(),
 		from :: gen_statem:from() | undefined}).
 -type statedata() :: #statedata{}.
--type state() :: idle | abort.
+-type state() :: idle | deregister.
 
 %% 3GPP TS 23.003 19.3.2 Root NAI
 -define(PERM_AKA,  $0).
