@@ -16,37 +16,44 @@
 %%% limitations under the License.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%
-%% @doc This module handles Oauth user authentication using
-%% textual files or Mnesia databases.
+%% @doc This module handles OAuth (Open Authorization) user authentication
+%% 	using text files or mnesia database.
 %%
-%% The module implements the
-%% <a href="https://tools.ietf.org/html/rfc6749">OAuth 2.0 authorization framework</a>.
-%% Authentication is carried out using a Bearer scheme using
-%% <a href="https://tools.ietf.org/html/rfc7519">JSON Web Token (JWT)</a> instead of using
-%% the resource owner's credentials. The JSON Web Token is validated with
-%% the certificate for the issuer using <a href="https://tools.ietf.org/html/rfc7517">JSON Web Key (JWK)</a>.
+%% The module implements the OAuth 2.0 Authorization Framework
+%% (<a href="https://tools.ietf.org/html/rfc6749">RFC6749</a>)
+%% with requests authenticated by Bearer Tokens
+%% (<a href="https://www.rfc-editor.org/info/rfc6750/">RFC6750</a>)
+%% as JSON Web Token (JWT)
+%% (<a href="https://www.rfc-editor.org/info/rfc7519/">RFC7519</a>).
+%% The JWT is validated with the certificate for the issuer using
+%% JSON Web Key (JWK)
+%% (<a href="https://www.rfc-editor.org/info/rfc7517">RFC7517</a>).
 %%
-%% The following environment variables must be configured in the {@link //ocs. ocs} application.
-%%
+%% The following environment variables must be configured for the
+%% {@link //ocs. ocs} application:
 %% <dl>
-%%   <dt>oauth_audience</dt>
-%%      <dd>Defines the recipient for who the JWT is intended: {string()}</dd>
-%%   <dt>oauth_issuer</dt>
-%%      <dd>Defines the issuer of the JWT: {string()}</dd>
-%%   <dt>oauth_key</dt>
-%%      <dd>Path of the file containing a publicKey in PEM format: {string()}</dd>
+%% 	<dt>`oauth_audience'</dt>
+%% 		<dd>The recipient for whom the JWT is intended (`string()'):
+%% 		(default: `"sigscale"')</dd>
+%%   <dt>`oauth_issuer'</dt>
+%% 		<dd>The issuer of the JWT (`string()'):
+%% 		(default: `undefined')</dd>
+%% 	<dt>`oauth_key'</dt>
+%% 		<dd>Path of the PEM format file containing a public key
+%% 		(`file:filename()'): (default: `undefined')</dd>
 %% </dl>
 %%
-%% The mod_oauth module must be include in the list of
-%% {@link //inets. inets} application's web server modules {@link //inets/httpd. httpd}.
-%%	<dl>
-%%		<dt>{modules, [mod_auth]}</dt>
-%%			<dd>The modules httpd environment variable contains the list of inets modules
-%%				that are to be run in the order specified.</dd>
-%%	</dl>
+%% An {@link //inets/httpd. httpd} service, in the {@link //inets. inets}
+%% application, is configured by including `mod_oauth' in the list of modules:
+%% <pre><code>
+%% 	{inets,
+%% 		[{services,
+%% 			[{httpd,
+%% 				[{modules,
+%% 					[mod_oauth, ...]}]}]}]}
+%% </code></pre>
+%% Note: Modules `mod_oauth' and `mod_auth' are mutually exclusive.
 %%
-%% Note: if mod_oauth is the specified authentication module, mod_auth cannot be listed
-%% in the same module list.
 -module(mod_oauth).
 -copyright('Copyright (c) 2016 - 2026 SigScale Global Inc.').
 
@@ -76,7 +83,7 @@ do1(Data, #mod{config_db = ConfigDb,
 		request_uri= RequestUri} = Info) ->
 	Path = mod_alias:path(Data, ConfigDb, RequestUri),
 	case directory_path(Path, ConfigDb) of
-		{yes, {Directory, DirectoryData}} ->
+		{ok, {Directory, DirectoryData}} ->
 			case proplists:get_value(auth_type, DirectoryData) of
 				undefined ->
 					{proceed, Data};
@@ -85,7 +92,7 @@ do1(Data, #mod{config_db = ConfigDb,
 				AuthType ->
 					handle_auth(Info, Directory, DirectoryData, AuthType)
 			end;
-		no ->
+		{error, _Reason} ->
 			{proceed, Data}
 	end.
 
@@ -153,10 +160,11 @@ store1([#'RSAPublicKey'{} = RSAPubEntry]) ->
 	when
 		Info :: #mod{},
 		Directory :: string(),
-		DirectoryData :: [tuple],
+		DirectoryData :: [tuple()],
 		AuthType :: plain | mnesia | dets,
 		Result :: {proceed, #mod{}}.
-handle_auth(#mod{data = Data, config_db = ConfigDb} = Info,
+handle_auth(#mod{parsed_header = RequestHeaders,
+				data = Data, config_db = ConfigDb} = Info,
 		Directory, DirectoryData, _AuthType) ->
 	case require(Info, Directory, DirectoryData) of
 		authorized ->
@@ -165,15 +173,24 @@ handle_auth(#mod{data = Data, config_db = ConfigDb} = Info,
 			{proceed, [{remote_user, User} | Data]};
 		{authorization_required, Realm} ->
 			Message = httpd_util:message(401, none, ConfigDb),
-			{proceed,
-					[{response, {401, ["WWW-Authenticate: Bearer realm=\"",Realm,
-					"\"\r\n\r\n","<HTML>\n<HEAD>\n<TITLE>", "Unauthorized","</TITLE>\n",
-					"</HEAD>\n<BODY>\n<H1>","Unauthorized",
-					"</H1>\n",Message,"\n</BODY>\n</HTML>\n"]}} | Data]};
+			Problem = #{type => "https://datatracker.ietf.org/doc/html/"
+							"rfc7231#section-6.5.4",
+					title => "Unauthorized",
+					detail => Message,
+					code => "", status => 401},
+			{ContentType, ResponseBody} = ocs_rest:format_problem(Problem,
+					RequestHeaders),
+			Size = integer_to_list(iolist_size(ResponseBody)),
+			ResponseHeaders = [{content_length, Size},
+					{content_type, ContentType},
+					{'WWW-Authenticate', ["Bearer realm=", Realm, $"]}],
+			send(Info, 401, ResponseHeaders, ResponseBody),
+			{proceed, [{response, {already_sent, 401, Size}} | Data]};
 		{status, {StatusCode, PhraseArgs, Reason}} ->
 			{proceed, [{status, {StatusCode, PhraseArgs, Reason}} | Data]}
 	end.
 
+%% @hidden
 require(#mod{parsed_header = ParsedHeader} = Info, Directory, DirectoryData) ->
 	ValidUsers  = proplists:get_value(require_user, DirectoryData),
 	ValidGroups = proplists:get_value(require_group, DirectoryData),
@@ -184,7 +201,7 @@ require(#mod{parsed_header = ParsedHeader} = Info, Directory, DirectoryData) ->
 			case proplists:get_value("authorization", ParsedHeader) of
 				false ->
 					authorization_required(DirectoryData);
-				"Bearer" ++ EncodedString = Credentials ->
+				"Bearer " ++ EncodedString = Credentials ->
 					case string:tokens(EncodedString, ".") of
 						[EncodedHeader, EncodedPayload, EncodedSignature] ->
 							require1(Info, Directory, DirectoryData, ValidUsers, ValidGroups,
@@ -201,11 +218,11 @@ require1(Info, Directory, DirectoryData, ValidUsers, ValidGroups,
 		EncodedHeader, EncodedPayload, EncodedSignature)
 		when is_list(EncodedHeader), is_list(EncodedPayload), is_list(EncodedSignature) ->
 	case validate_header(EncodedHeader) of
-		{valid, _DecodedHeader} ->
+		{ok, _DecodedHeader} ->
 			case validate_payload(EncodedPayload) of
-				{valid, DecodedPayload} ->
+				{ok, DecodedPayload} ->
 					case validate_cert(EncodedHeader, EncodedPayload, EncodedSignature) of
-						authenticated ->
+						ok ->
 							validate_user(Info, Directory, DirectoryData,
 									ValidUsers, ValidGroups, DecodedPayload);
 						{error, _Reason} ->
@@ -223,7 +240,7 @@ authorization_required(DirectoryData) ->
 	case lists:keyfind(auth_name, 1, DirectoryData) of
 		false ->
 			{status, {500, none, "mod_auth : " ++ "AuthName directive not specified"}};
-		Realm ->
+		{auth_name, Realm} ->
 			{authorization_required, Realm}
 	end.
 
@@ -232,7 +249,7 @@ authorization_required(DirectoryData) ->
 		EncodedHeader :: string(),
 		EncodedPayLoad :: string(),
 		EncodedSignature :: string(),
-		Result :: authenticated | {error, Reason},
+		Result :: ok | {error, Reason},
 		Reason :: term().
 %% @doc Validate a JWT certificate.
 validate_cert(EncodedHeader, EncodedPayLoad, EncodedSignature) ->
@@ -248,20 +265,20 @@ validate_cert1(EncodedHeader, EncodedPayLoad, DecodedSignature)
 		public_key:verify(Msg, sha256, DecodedSignature, RSAPublicKey)
 	of
 		true ->
-			authenticated;
+			ok;
 		false ->
-			{error, not_authenticated}
+			{error, invalid}
 	catch
 		_:Reason ->
 			{error, Reason}
 	end;
-validate_cert1(_, _, _DecodedSignature) ->
+validate_cert1(_EncodedHeader, _EncodedPayLoad, _DecodedSignature) ->
 	{error, invalid}.
 
 -spec validate_payload(EncodedPayload) -> Result
 	when
 		EncodedPayload :: string(),
-		Result :: {valid, DecodedPayload} | {error, Reason},
+		Result :: {ok, DecodedPayload} | {error, Reason},
 		DecodedPayload :: map(),
 		Reason :: term().
 %% @doc Validate a JWT payload.
@@ -269,41 +286,30 @@ validate_payload(EncodedPayload) ->
 		DecodedPayLoad = mochijson:decode(decode_base64url(EncodedPayload)),
 		validate_payload1(struct_to_map(DecodedPayLoad)).
 %% @hidden
-validate_payload1(#{"aud" := AudList, "iss" := Iss, "exp" := Exp} = DecodedPayload)
-		when is_list(AudList), is_list(Iss) ->
-	try
-		{ok, Aud} = application:get_env(ocs, oauth_audience),
-		true = check_aud(Aud, AudList),
-		{ok, IssValue} = application:get_env(ocs, oauth_issuer),
-		true = IssValue == Iss,
-		Exp < os:system_time(seconds)
-	of
-		true ->
-			{valid, DecodedPayload};
-		false ->
+validate_payload1(#{"aud" := Aud, "iss" := Iss, "exp" := Exp} = DecodedPayload)
+		when is_list(Aud), is_list(Iss) ->
+	{ok, Audience} = application:get_env(ocs, oauth_audience),
+	{ok, Issuer} = application:get_env(ocs, oauth_issuer),
+	case {Audience, Issuer, erlang:system_time(second)} of
+		{Aud, Iss, Now} when Now < Exp ->
+			{ok, DecodedPayload};
+		{Audience, Iss, Now} when is_list(Audience), Now < Exp ->
+			case lists:member(Audience, Aud) of
+				true ->
+					{ok, DecodedPayload};
+				false ->
+					{error, invalid}
+			end;
+		{_, _, _} ->
 			{error, invalid}
-	catch
-		_:Reason ->
-			{error, Reason}
 	end;
 validate_payload1(_DecodedPayload) ->
 	{error, invalid}.
 
-%% @hidden
-check_aud(_Aud, []) ->
-	false;
-check_aud(Aud, AudList) ->
-	case lists:member(Aud, AudList) of
-		true ->
-			true;
-		false ->
-			Aud == AudList
-	end.
-
 -spec validate_header(EncodedHeader) -> Result
 	when
 		EncodedHeader :: string(),
-		Result :: {valid, DecodedPayload} | {error, Reason},
+		Result :: {ok, DecodedPayload} | {error, Reason},
 		DecodedPayload :: map(),
 		Reason :: term().
 %% @doc Validate a JWT header.
@@ -313,7 +319,7 @@ validate_header(EncodedHeader) ->
 	validate_header1(struct_to_map(DecodedHeader)).
 %% @hidden
 validate_header1(#{"alg" := "RS256", "typ" := "JWT"} = DecodedHeader) ->
-	{valid, DecodedHeader};
+	{ok, DecodedHeader};
 validate_header1(_DecodedHeader) ->
 	{error, invalid}.
 
@@ -327,7 +333,7 @@ validate_header1(_DecodedHeader) ->
 		ValidGroups :: list(),
 		DecodedPayload :: map(),
 		Result :: {authorized, User} | {authorization_required, Reason} |
-				{'status',{StatusCode ,none, Reason}},
+				{status, {StatusCode, none, Reason}},
 		StatusCode :: integer(),
 		User :: string(),
 		Reason :: term().
@@ -335,7 +341,7 @@ validate_user(Info, Directory, DirectoryData,
 		ValidUsers, ValidGroups, #{"email" := Email}) when is_list(Email) ->
 	case user_accepted(Email, ValidUsers) of
 		true ->
-			{yes, Email};
+			{authorized, Email};
 		false ->
 			case user_group_check(Info, Email,
 					ValidGroups, Directory,  DirectoryData) of
@@ -350,13 +356,13 @@ validate_user(Info, Directory, DirectoryData,
 		when is_list(PrefUserName) ->
 	case user_accepted(PrefUserName, ValidUsers) of
 		true ->
-			{yes, PrefUserName};
+			{authorized, PrefUserName};
 		false ->
 			case user_group_check(Info, PrefUserName,
 					ValidGroups, Directory, DirectoryData) of
 				true ->
 					{authorized, PrefUserName};
-				_ ->
+				false ->
 					authorization_required(DirectoryData)
 			end
 	end.
@@ -375,41 +381,42 @@ user_accepted(User, ValidUsers) ->
 		UserGroups :: list(),
 		Directory :: string(),
 		DirectoryData :: [tuple()],
-		Result :: true | false.
+		Result :: boolean().
 user_group_check(_Info, _User, undefined,
 		_Directory, _DirectoryData) ->
 	false;
-user_group_check(_Info, _User, [],
-		_Directory, _DirectoryData) ->
-	false;
-user_group_check(Info, User, [Group | Rest],
+user_group_check(Info, User, [H | T],
 		Directory, DirectoryData) ->
-	case get_user_list(DirectoryData, Group) of
+	case get_user_list(Directory, DirectoryData, H) of
 		{ok, UserList} ->
 			case lists:member(User, UserList) of
 				true ->
 					true;
 				false ->
-					user_group_check(Info, User, Rest,
+					user_group_check(Info, User, T,
 							Directory, DirectoryData)
 				end;
 		_ ->
 			false
-	end.
+	end;
+user_group_check(_Info, _User, [], _Directory, _DirectoryData) ->
+	false.
 
--spec get_user_list(DirectoryData, Group) -> Result
+-spec get_user_list(Directory, DirectoryData, Group) -> Result
 	when
+		Directory :: string(),
 		DirectoryData :: [tuple()],
 		Group :: string(),
 		Result :: {ok, UserList} | {error, Reason},
 		UserList :: list(),
 		Reason :: term().
-get_user_list(DirectoryData, Group) ->
+get_user_list(Directory, DirectoryData, Group) ->
 	case lists:keyfind(auth_type, 1, DirectoryData) of
 		{auth_type, plain} ->
 			mod_auth_plain:list_group_members(DirectoryData, Group);
 		{auth_type, mnesia} ->
-			mod_auth_mnesia:list_group_members(DirectoryData, Group);
+			DirectoryData1 = [{path, Directory} | DirectoryData],
+			mod_auth_mnesia:list_group_members(DirectoryData1, Group);
 		{auth_type, dets} ->
 			mod_auth_dets:list_group_members(DirectoryData, Group)
 	end.
@@ -449,24 +456,25 @@ sub_chars1([], Acc) ->
 	when
 		Path :: string(),
 		ConfigDb :: term(),
-		Result :: {yes, {Directory, DirectoryData}} | no,
-		Directory :: list(),
-		DirectoryData :: list().
+		Result :: {ok, {Directory, DirectoryData}} | {error, Reason},
+		Directory :: string(),
+		DirectoryData :: list(),
+		Reason :: invalid.
 %% @doc Look up the configuration directory.
 directory_path(Path, ConfigDB)
 		when is_list(Path) ->
 	Directories = ets:match(ConfigDB,{directory, {'$1','_'}}),
 	case path_check(Path, lists:usort(Directories)) of
-		{yes,Directory} ->
-			{yes, {Directory,
-					lists:flatten(ets:match(ConfigDB,{directory, {Directory,'$1'}}))}};
-		no ->
-			no
+		{ok, Directory} ->
+			{ok, {Directory, lists:flatten(ets:match(ConfigDB,
+					{directory, {Directory,'$1'}}))}};
+		{error, Reason} ->
+			{error, Reason}
 	end.
 
 %% @hidden
 path_check(_Path, []) ->
-	no;
+	{error, invalid};
 path_check(Path, Directories) ->
 	List = convert(Path, Directories, []),
 	F = fun(A, B)
@@ -476,7 +484,7 @@ path_check(Path, Directories) ->
 			false
 	end,
 	[{_, Directory} | _] = lists:sort(F, List),
-	{yes, Directory}.
+	{ok, Directory}.
 
 %% @hidden
 convert(Path,[[H] | T], Acc) ->
@@ -498,3 +506,10 @@ struct_to_map([{Name, Value} | T ], Acc) ->
 	struct_to_map(T, Acc#{Name => Value});
 struct_to_map([], Acc) ->
 	Acc.
+
+%% @hidden
+send(#mod{socket = Socket, socket_type = SocketType} = Info,
+		StatusCode, Headers, ResponseBody) ->
+	httpd_response:send_header(Info, StatusCode, Headers),
+	httpd_socket:deliver(SocketType, Socket, ResponseBody).
+
