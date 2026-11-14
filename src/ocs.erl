@@ -45,8 +45,7 @@
 -export([statistics/1]).
 -export([start/4, start/5, stop/3, get_acct/1, get_auth/1]).
 %% export the ocs private API
--export([normalize/1, subscription/4, end_period/2]).
--export([parse_bucket/1]).
+-export([subscription/4, end_period/2]).
 
 -export_type([eap_method/0, match/0]).
 
@@ -3204,136 +3203,6 @@ clean_reservations1(_Before, _Refund, '$end_of_table') ->
 %%  The ocs private API
 %%----------------------------------------------------------------------
 
--spec parse_bucket(Bucket) -> Bucket
-	when
-		Bucket :: #bucket{}.
-%% @doc Replace reservations field of bucket with attributes.
-%% @private
-parse_bucket(Bucket) ->
-	case element(8, Bucket) of
-		Attributes when is_map(Attributes) ->
-			Bucket;
-		Reservations when is_list(Reservations) ->
-			F1 = fun(R, MapAcc) ->
-				Size = size(R),
-				F2 = fun F2(6, Map) ->
-							SessionId = element(6, R),
-							MapAcc#{SessionId => Map};
-						F2(N, Map) when N =< Size ->
-							case element(N, R)  of
-								undefined ->
-									F2(N + 1, Map);
-								Value ->
-									Key = reservation_key(N),
-									F2(N + 1, Map#{Key => Value})
-							end
-				end,
-				F2(1, #{})
-			end,
-			parse_bucket(Bucket, lists:foldl(F1, #{}, Reservations))
-	end.
-%% @hidden
-parse_bucket(#bucket{start_date = Milliseconds,
-		end_date = Milliseconds} = Bucket, ReservationMap)
-		when is_integer(Milliseconds) ->
-	parse_bucket(Bucket, ReservationMap, session);
-parse_bucket(#bucket{} = Bucket, ReservationMap) ->
-	parse_bucket(Bucket, ReservationMap, normal).
-%% @hidden
-parse_bucket(Bucket, Reservations, BucketType) ->
-	TS = erlang:system_time(millisecond),
-	N = erlang:unique_integer([positive]),
-	Attributes = case maps:size(Reservations) of
-		0 ->
-			#{bucket_type => BucketType};
-		_Num ->
-			#{bucket_type => BucketType, reservations => Reservations}
-	end,
-	Bucket#bucket{attributes = Attributes, last_modified = {TS, N}}.
-
-%%----------------------------------------------------------------------
-%%  internal functions
-%%----------------------------------------------------------------------
-
--spec generate_password(Length) -> password()
-	when
-		Length :: pos_integer().
-%% @doc Generate a random uniform password.
-%% @hidden
-generate_password(Length) when Length > 0 ->
-	Charset = charset(),
-	NumChars = length(Charset),
-	Random = crypto:strong_rand_bytes(Length),
-	generate_password(Random, Charset, NumChars,[]).
-%% @hidden
-generate_password(<<N, Rest/binary>>, Charset, NumChars, Acc) ->
-	CharNum = (N rem NumChars) + 1,
-	NewAcc = [lists:nth(CharNum, Charset) | Acc],
-	generate_password(Rest, Charset, NumChars, NewAcc);
-generate_password(<<>>, _Charset, _NumChars, Acc) ->
-	Acc.
-
--spec generate_identity(Length) -> string()
-	when
-		Length :: pos_integer().
-%% @doc Generate a random uniform numeric identity.
-%% @hidden
-generate_identity(Length) when Length > 0 ->
-	Charset = lists:seq($0, $9),
-	NumChars = length(Charset),
-	Random = crypto:strong_rand_bytes(Length),
-	generate_identity(Random, Charset, NumChars,[]).
-%% @hidden
-generate_identity(<<N, Rest/binary>>, Charset, NumChars, Acc) ->
-	CharNum = (N rem NumChars) + 1,
-	NewAcc = [lists:nth(CharNum, Charset) | Acc],
-	generate_identity(Rest, Charset, NumChars, NewAcc);
-generate_identity(<<>>, _Charset, _NumChars, Acc) ->
-	Acc.
-
--spec charset() -> Charset
-	when
-		Charset :: password().
-%% @doc Returns the table of valid characters for passwords.
-%% @hidden
-charset() ->
-	C1 = lists:seq($2, $9),
-	C2 = lists:seq($a, $h),
-	C3 = lists:seq($j, $k),
-	C4 = lists:seq($m, $n),
-	C5 = lists:seq($p, $t),
-	C6 = lists:seq($w, $z),
-	lists:append([C1, C2, C3, C4, C5, C6]).
-
--spec normalize(String) -> string()
-	when
-		String :: string().
-%% @doc Strip non hex digits and convert to lower case.
-%% @hidden
-normalize(String) ->
-	normalize(String, []).
-%% @hidden
-normalize([Char | T], Acc) when Char >= 48, Char =< 57 ->
-	normalize(T, [Char | Acc]);
-normalize([Char | T], Acc) when Char >= 97, Char =< 102 ->
-	normalize(T, [Char | Acc]);
-normalize([$A | T], Acc) ->
-	normalize(T, [$a | Acc]);
-normalize([$B | T], Acc) ->
-	normalize(T, [$b | Acc]);
-normalize([$C | T], Acc) ->
-	normalize(T, [$c | Acc]);
-normalize([$D | T], Acc) ->
-	normalize(T, [$d | Acc]);
-normalize([$E | T], Acc) ->
-	normalize(T, [$e | Acc]);
-normalize([$F | T], Acc) ->
-	normalize(T, [$f | Acc]);
-normalize([_ | T], Acc) ->
-	normalize(T, Acc);
-normalize([], Acc) ->
-	lists:reverse(Acc).
-
 -spec subscription(Product, Offer, Buckets, InitialFlag) -> Result
 	when
 		Product :: #product{},
@@ -3494,6 +3363,130 @@ subscription(Product, Now, InitialFlag, Buckets, [_H | T]) ->
 subscription(Product, _Now, _, Buckets, []) ->
 	NewBIds = [Id || #bucket{id = Id} <- Buckets],
 	{Product#product{balance = NewBIds}, Buckets}.
+
+-spec end_period(StartTime, Period) -> EndTime
+	when
+		StartTime :: non_neg_integer(),
+		Period :: hourly | daily | weekly | monthly | yearly,
+		EndTime :: non_neg_integer().
+%% @doc Calculate end of period.
+%% @private
+end_period(StartTime, Period) when is_integer(StartTime) ->
+	end_period1(date(StartTime), Period).
+%% @hidden
+end_period1({Date, {23, Minute, Second}}, hourly) ->
+	NextDay = calendar:date_to_gregorian_days(Date) + 1,
+	EndDate = calendar:gregorian_days_to_date(NextDay),
+	EndTime = {0, Minute, Second},
+	gregorian_datetime_to_system_time({EndDate, EndTime}) - 1;
+end_period1({Date, {Hour, Minute, Second}}, hourly) ->
+	EndTime = {Hour + 1, Minute, Second},
+	gregorian_datetime_to_system_time({Date, EndTime}) - 1;
+end_period1({Date, Time}, daily) ->
+	NextDay = calendar:date_to_gregorian_days(Date) + 1,
+	EndDate = calendar:gregorian_days_to_date(NextDay),
+	gregorian_datetime_to_system_time({EndDate, Time}) - 1;
+end_period1({Date, Time}, weekly) ->
+	NextDay = calendar:date_to_gregorian_days(Date) + 7,
+	EndDate = calendar:gregorian_days_to_date(NextDay),
+	gregorian_datetime_to_system_time({EndDate, Time}) - 1;
+end_period1({{Year, 1, Day}, Time}, monthly)
+		when Day > 28 ->
+	NextDay = calendar:last_day_of_the_month(Year, 2),
+	EndDate = {Year, 2, NextDay},
+	gregorian_datetime_to_system_time({EndDate, Time}) - 1;
+end_period1({{Year, 2, Day}, Time}, monthly) when Day < 28 ->
+	EndDate = {Year, 3, Day},
+	gregorian_datetime_to_system_time({EndDate, Time}) - 1;
+end_period1({{Year, 2, Day}, Time}, monthly) ->
+	EndDate = case calendar:last_day_of_the_month(Year, 2) of
+		Day ->
+			{Year, 3, 31};
+		_ ->
+			{Year, 3, Day}
+	end,
+	gregorian_datetime_to_system_time({EndDate, Time}) - 1;
+end_period1({{Year, 3, 31}, Time}, monthly) ->
+	gregorian_datetime_to_system_time({{Year, 4, 30}, Time}) - 1;
+end_period1({{Year, 4, 30}, Time}, monthly) ->
+	gregorian_datetime_to_system_time({{Year, 5, 31}, Time}) - 1;
+end_period1({{Year, 5, 31}, Time}, monthly) ->
+	gregorian_datetime_to_system_time({{Year, 6, 30}, Time}) - 1;
+end_period1({{Year, 6, 30}, Time}, monthly) ->
+	gregorian_datetime_to_system_time({{Year, 7, 31}, Time}) - 1;
+end_period1({{Year, 7, 31}, Time}, monthly) ->
+	gregorian_datetime_to_system_time({{Year, 8, 31}, Time}) - 1;
+end_period1({{Year, 8, 31}, Time}, monthly) ->
+	gregorian_datetime_to_system_time({{Year, 9, 30}, Time}) - 1;
+end_period1({{Year, 9, 30}, Time}, monthly) ->
+	gregorian_datetime_to_system_time({{Year, 10, 31}, Time}) - 1;
+end_period1({{Year, 10, 31}, Time}, monthly) ->
+	gregorian_datetime_to_system_time({{Year, 11, 30}, Time}) - 1;
+end_period1({{Year, 11, 30}, Time}, monthly) ->
+	gregorian_datetime_to_system_time({{Year, 12, 31}, Time}) - 1;
+end_period1({{Year, 12, Day}, Time}, monthly) ->
+	EndDate = {Year + 1, 1, Day},
+	gregorian_datetime_to_system_time({EndDate, Time}) - 1;
+end_period1({{Year, Month, Day}, Time}, monthly) ->
+	EndDate = {Year, Month + 1, Day},
+	gregorian_datetime_to_system_time({EndDate, Time}) - 1;
+end_period1({{Year, Month, Day}, Time}, yearly) ->
+	EndDate = {Year + 1, Month, Day},
+	gregorian_datetime_to_system_time({EndDate, Time}) - 1.
+
+%%----------------------------------------------------------------------
+%%  internal functions
+%%----------------------------------------------------------------------
+
+-spec generate_password(Length) -> password()
+	when
+		Length :: pos_integer().
+%% @doc Generate a random uniform password.
+%% @hidden
+generate_password(Length) when Length > 0 ->
+	Charset = charset(),
+	NumChars = length(Charset),
+	Random = crypto:strong_rand_bytes(Length),
+	generate_password(Random, Charset, NumChars,[]).
+%% @hidden
+generate_password(<<N, Rest/binary>>, Charset, NumChars, Acc) ->
+	CharNum = (N rem NumChars) + 1,
+	NewAcc = [lists:nth(CharNum, Charset) | Acc],
+	generate_password(Rest, Charset, NumChars, NewAcc);
+generate_password(<<>>, _Charset, _NumChars, Acc) ->
+	Acc.
+
+-spec generate_identity(Length) -> string()
+	when
+		Length :: pos_integer().
+%% @doc Generate a random uniform numeric identity.
+%% @hidden
+generate_identity(Length) when Length > 0 ->
+	Charset = lists:seq($0, $9),
+	NumChars = length(Charset),
+	Random = crypto:strong_rand_bytes(Length),
+	generate_identity(Random, Charset, NumChars,[]).
+%% @hidden
+generate_identity(<<N, Rest/binary>>, Charset, NumChars, Acc) ->
+	CharNum = (N rem NumChars) + 1,
+	NewAcc = [lists:nth(CharNum, Charset) | Acc],
+	generate_identity(Rest, Charset, NumChars, NewAcc);
+generate_identity(<<>>, _Charset, _NumChars, Acc) ->
+	Acc.
+
+-spec charset() -> Charset
+	when
+		Charset :: password().
+%% @doc Returns the table of valid characters for passwords.
+%% @hidden
+charset() ->
+	C1 = lists:seq($2, $9),
+	C2 = lists:seq($a, $h),
+	C3 = lists:seq($j, $k),
+	C4 = lists:seq($m, $n),
+	C5 = lists:seq($p, $t),
+	C6 = lists:seq($w, $z),
+	lists:append([C1, C2, C3, C4, C5, C6]).
 
 %% @hidden
 bucket_price(PriceName,
@@ -3666,76 +3659,6 @@ date(MilliSeconds) when is_integer(MilliSeconds) ->
 	Seconds = ?EPOCH + (MilliSeconds div 1000),
 	calendar:gregorian_seconds_to_datetime(Seconds).
 
--spec end_period(StartTime, Period) -> EndTime
-	when
-		StartTime :: non_neg_integer(),
-		Period :: hourly | daily | weekly | monthly | yearly,
-		EndTime :: non_neg_integer().
-%% @doc Calculate end of period.
-%% @private
-end_period(StartTime, Period) when is_integer(StartTime) ->
-	end_period1(date(StartTime), Period).
-%% @hidden
-end_period1({Date, {23, Minute, Second}}, hourly) ->
-	NextDay = calendar:date_to_gregorian_days(Date) + 1,
-	EndDate = calendar:gregorian_days_to_date(NextDay),
-	EndTime = {0, Minute, Second},
-	gregorian_datetime_to_system_time({EndDate, EndTime}) - 1;
-end_period1({Date, {Hour, Minute, Second}}, hourly) ->
-	EndTime = {Hour + 1, Minute, Second},
-	gregorian_datetime_to_system_time({Date, EndTime}) - 1;
-end_period1({Date, Time}, daily) ->
-	NextDay = calendar:date_to_gregorian_days(Date) + 1,
-	EndDate = calendar:gregorian_days_to_date(NextDay),
-	gregorian_datetime_to_system_time({EndDate, Time}) - 1;
-end_period1({Date, Time}, weekly) ->
-	NextDay = calendar:date_to_gregorian_days(Date) + 7,
-	EndDate = calendar:gregorian_days_to_date(NextDay),
-	gregorian_datetime_to_system_time({EndDate, Time}) - 1;
-end_period1({{Year, 1, Day}, Time}, monthly)
-		when Day > 28 ->
-	NextDay = calendar:last_day_of_the_month(Year, 2),
-	EndDate = {Year, 2, NextDay},
-	gregorian_datetime_to_system_time({EndDate, Time}) - 1;
-end_period1({{Year, 2, Day}, Time}, monthly) when Day < 28 ->
-	EndDate = {Year, 3, Day},
-	gregorian_datetime_to_system_time({EndDate, Time}) - 1;
-end_period1({{Year, 2, Day}, Time}, monthly) ->
-	EndDate = case calendar:last_day_of_the_month(Year, 2) of
-		Day ->
-			{Year, 3, 31};
-		_ ->
-			{Year, 3, Day}
-	end,
-	gregorian_datetime_to_system_time({EndDate, Time}) - 1;
-end_period1({{Year, 3, 31}, Time}, monthly) ->
-	gregorian_datetime_to_system_time({{Year, 4, 30}, Time}) - 1;
-end_period1({{Year, 4, 30}, Time}, monthly) ->
-	gregorian_datetime_to_system_time({{Year, 5, 31}, Time}) - 1;
-end_period1({{Year, 5, 31}, Time}, monthly) ->
-	gregorian_datetime_to_system_time({{Year, 6, 30}, Time}) - 1;
-end_period1({{Year, 6, 30}, Time}, monthly) ->
-	gregorian_datetime_to_system_time({{Year, 7, 31}, Time}) - 1;
-end_period1({{Year, 7, 31}, Time}, monthly) ->
-	gregorian_datetime_to_system_time({{Year, 8, 31}, Time}) - 1;
-end_period1({{Year, 8, 31}, Time}, monthly) ->
-	gregorian_datetime_to_system_time({{Year, 9, 30}, Time}) - 1;
-end_period1({{Year, 9, 30}, Time}, monthly) ->
-	gregorian_datetime_to_system_time({{Year, 10, 31}, Time}) - 1;
-end_period1({{Year, 10, 31}, Time}, monthly) ->
-	gregorian_datetime_to_system_time({{Year, 11, 30}, Time}) - 1;
-end_period1({{Year, 11, 30}, Time}, monthly) ->
-	gregorian_datetime_to_system_time({{Year, 12, 31}, Time}) - 1;
-end_period1({{Year, 12, Day}, Time}, monthly) ->
-	EndDate = {Year + 1, 1, Day},
-	gregorian_datetime_to_system_time({EndDate, Time}) - 1;
-end_period1({{Year, Month, Day}, Time}, monthly) ->
-	EndDate = {Year, Month + 1, Day},
-	gregorian_datetime_to_system_time({EndDate, Time}) - 1;
-end_period1({{Year, Month, Day}, Time}, yearly) ->
-	EndDate = {Year + 1, Month, Day},
-	gregorian_datetime_to_system_time({EndDate, Time}) - 1.
-
 -spec default_chars(CharValueUse, ReqChars) -> NewChars
 	when
 		CharValueUse:: [#char_value_use{}],
@@ -3880,16 +3803,4 @@ service_exist(Services) ->
 			end
 	end,
 	lists:any(F, Services).
-
-%% @hidden
-reservation_key(1) ->
-	ts;
-reservation_key(2) ->
-	debit;
-reservation_key(3) ->
-	reserve;
-reservation_key(4) ->
-	service_id;
-reservation_key(5) ->
-	charging_key.
 

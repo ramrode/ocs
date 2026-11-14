@@ -194,9 +194,8 @@ rate(Protocol, ServiceType, ServiceId, ChargingKey,
 											_Other ->
 												undefined
 										end,
-										NewBuckets = lists:map(fun ocs:parse_bucket/1, Buckets),
 										RateResult = rate1(Protocol, Service, ServiceId, Product,
-												NewBuckets, Timestamp, Address, Direction, Offer,
+												Buckets, Timestamp, Address, Direction, Offer,
 												Flag, DebitAmounts, ReserveAmounts, ServiceType,
 												SessionAttributes, ChargingKey,
 												ServiceNetwork),
