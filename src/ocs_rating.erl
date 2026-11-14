@@ -140,31 +140,17 @@
 %% 	the same `SessionAttributes' and a `Flag' value of `final'.
 %%
 rate(Protocol, ServiceType, ServiceId, ChargingKey,
-		ServiceNetwork, SubscriberIDs, Timestamp, Address,
-		Direction, Flag, DebitAmounts, ReserveAmounts,
-		SessionAttributes) when is_binary(ServiceNetwork) ->
-	rate(Protocol, ServiceType, ServiceId, ChargingKey,
-			binary_to_list(ServiceNetwork), SubscriberIDs,
-			Timestamp, Address, Direction, Flag, DebitAmounts,
-			ReserveAmounts, SessionAttributes);
-rate(Protocol, ServiceType, ServiceId, ChargingKey,
-		ServiceNetwork, SubscriberIDs, Timestamp, Address,
-		Direction, Flag, DebitAmounts, ReserveAmounts,
-		SessionAttributes) when is_binary(Address) ->
-	rate(Protocol, ServiceType, ServiceId, ChargingKey,
-			ServiceNetwork, SubscriberIDs, Timestamp,
-			binary_to_list(Address), Direction, Flag,
-			DebitAmounts, ReserveAmounts, SessionAttributes);
-rate(Protocol, ServiceType, ServiceId, ChargingKey,
 		ServiceNetwork, SubscriberIDs,
 		{{_, _, _}, {_, _, _}} = Timestamp, Address,
 		Direction, Flag, DebitAmounts, ReserveAmounts,
 		SessionAttributes)
 		when ((Protocol == radius) or (Protocol == diameter) or (Protocol == nrf)),
 		(is_integer(ChargingKey) or (ChargingKey == undefined)),
-		(is_list(ServiceNetwork) or (ServiceNetwork == undefined)),
+		((ServiceNetwork == undefined) orelse is_binary(ServiceNetwork)
+				orelse is_list(ServiceNetwork)),
 		is_list(SubscriberIDs),
-		(is_list(Address) or (Address == undefined)),
+		((Address == undefined) orelse is_binary(Address)
+				orelse is_list(Address)),
 		((Direction == answer) or (Direction == originate)
 				or (Direction == undefined)),
 		((Flag == initial) or (Flag == interim) or (Flag == final) or (Flag == event)),
@@ -427,6 +413,20 @@ rate3(_Protocol, _Service, _ServiceId, _Product, _Buckets,
 		_SessionId, _Rated, _ChargingKey, _ServiceNetwork,
 		[#price{type = #pla_ref{}} = Price | _]) ->
 	{pla_ref, Price};
+rate3(Protocol, Service, ServiceId, Product, Buckets, Address,
+		Flag, DebitAmounts, ReserveAmounts, SessionId, Rated,
+		ChargingKey, ServiceNetwork, Prices)
+		when is_binary(Address) ->
+	rate3(Protocol, Service, ServiceId, Product, Buckets,
+		is_binary(Address), Flag, DebitAmounts, ReserveAmounts,
+		SessionId, Rated, ChargingKey, ServiceNetwork, Prices);
+rate3(Protocol, Service, ServiceId, Product, Buckets, Address,
+		Flag, DebitAmounts, ReserveAmounts, SessionId, Rated,
+		ChargingKey, ServiceNetwork, Prices)
+		when is_binary(ServiceNetwork) ->
+	rate3(Protocol, Service, ServiceId, Product, Buckets, Address,
+		Flag, DebitAmounts, ReserveAmounts, SessionId, Rated,
+		ChargingKey, binary_to_list(ServiceNetwork), Prices);
 rate3(Protocol, Service, ServiceId, Product, Buckets,
 		Address, Flag, DebitAmounts, ReserveAmounts,
 		SessionId, Rated, ChargingKey, ServiceNetwork, Prices) ->
@@ -445,8 +445,8 @@ rate3(Protocol, Service, ServiceId, Product, Buckets,
 		SubscriberID :: string() | binary(),
 		ServiceId :: integer() | undefined,
 		ChargingKey :: integer() | undefined,
-		ServiceNetwork :: [$0..$9],
-		Address :: [$0..$9],
+		ServiceNetwork :: [$0..$9] | undefined,
+		Address :: [$0..$9] | undefined,
 		Prices :: [#price{}],
 		DebitAmounts :: [{UnitType, Amount}],
 		ReserveAmounts :: [{UnitType, Amount}] | undefined,
@@ -474,9 +474,10 @@ charge(Protocol, Flag, SubscriberIDs, ServiceId, ChargingKey,
 		when ((Protocol == radius) or (Protocol == diameter)
 				or (Protocol == nrf)),
 		is_list(SubscriberIDs),
-		(is_integer(ChargingKey) or (ChargingKey == undefined)),
 		(is_integer(ServiceId) or (ServiceId== undefined)),
-		is_list(Prices), Prices /= [],
+		(is_integer(ChargingKey) or (ChargingKey == undefined)),
+		((ServiceNetwork == undefined) orelse is_list(ServiceNetwork)),
+		((Address == undefined) orelse is_list(Address)), length(Prices) > 0,
 		((Flag == initial) or (Flag == interim) or (Flag == final) or (Flag == event)),
 		is_list(DebitAmounts),
 		(is_list(ReserveAmounts) or (ReserveAmounts == undefined)),
