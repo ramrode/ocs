@@ -209,5 +209,6 @@
 				{nrf_valid_time, undefined},
 				{nrf_valid_unit, undefined},
 				{nrf_sub_id_type, [imsi, msisdn]},
-				{elastic_shipper, undefined}]},
+				{elastic_shipper, undefined},
+				{sticky_locks, #{service => true, bucket => true}}]},
 		{mod, {ocs_app, []}}]}.

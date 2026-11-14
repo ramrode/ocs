@@ -157,10 +157,23 @@ rate(Protocol, ServiceType, ServiceId, ChargingKey,
 		is_list(DebitAmounts),
 		(is_list(ReserveAmounts) or (ReserveAmounts == undefined)),
 		length(SessionAttributes) > 0 ->
+	{ok, StickyLocks} = application:get_env(ocs, sticky_locks),
+	ServiceLock = case maps:get(service, StickyLocks, true) of
+		true ->
+			sticky_write;
+		false ->
+			write
+	end,
+	BucketLock = case maps:get(bucket, StickyLocks, true) of
+		true ->
+			sticky_write;
+		false ->
+			write
+	end,
 	F = fun F([SubscriberID | T]) when is_list(SubscriberID) ->
 				F([list_to_binary(SubscriberID) | T]);
 			F([SubscriberID | T]) when is_binary(SubscriberID) ->
-				case mnesia:read(service, SubscriberID, sticky_write) of
+				case mnesia:read(service, SubscriberID, ServiceLock) of
 					[#service{product = ProdRef} = Service] ->
 						case mnesia:read(product, ProdRef, read) of
 							[#product{product = OfferId,
@@ -171,7 +184,7 @@ rate(Protocol, ServiceType, ServiceId, ChargingKey,
 													end_date = EndDate, start_date = StartDate} = Offer]
 											when ((StartDate =< Now) or (StartDate == undefined)),
 													((EndDate > Now) or (EndDate == undefined)) ->
-										Buckets = lists:flatten([mnesia:read(bucket, Id, sticky_write)
+										Buckets = lists:flatten([mnesia:read(bucket, Id, BucketLock)
 												|| Id <- BucketRefs]),
 										RedirectServerAddress = case lists:keyfind("redirectServer",
 												#char_value_use.name, CharValueUse) of
@@ -482,6 +495,13 @@ charge(Protocol, Flag, SubscriberIDs, ServiceId, ChargingKey,
 		is_list(DebitAmounts),
 		(is_list(ReserveAmounts) or (ReserveAmounts == undefined)),
 		length(SessionAttributes) > 0 ->
+	{ok, StickyLocks} = application:get_env(ocs, sticky_locks),
+	BucketLock = case maps:get(bucket, StickyLocks, true) of
+		true ->
+			sticky_write;
+		false ->
+			write
+	end,
 	F = fun F([SubscriberID | T]) when is_list(SubscriberID) ->
 				F([list_to_binary(SubscriberID) | T]);
 			F([SubscriberID | T]) when is_binary(SubscriberID) ->
@@ -492,7 +512,7 @@ charge(Protocol, Flag, SubscriberIDs, ServiceId, ChargingKey,
 								case mnesia:read(offer, OfferId, read) of
 									[#offer{name = OfferName,
 											char_value_use = CharValueUse} = _Offer] ->
-										Buckets = lists:flatten([mnesia:read(bucket, Id, sticky_write)
+										Buckets = lists:flatten([mnesia:read(bucket, Id, BucketLock)
 												|| Id <- BucketRefs]),
 										RedirectServerAddress = case lists:keyfind("redirectServer",
 												#char_value_use.name, CharValueUse) of
@@ -1894,13 +1914,21 @@ authorize1(Protocol, ServiceType,
 		#service{attributes = Attributes, product = ProdRef} = Service,
 		Timestamp, Address, Direction, SessionAttributes) ->
 	Now = erlang:system_time(millisecond),
+	{ok, StickyLocks} = application:get_env(ocs, sticky_locks),
+	BucketLock = case maps:get(bucket, StickyLocks, true) of
+		true ->
+			sticky_write;
+		false ->
+			write
+	end,
 	case mnesia:read(product, ProdRef, read) of
 		[#product{product = OfferId, balance = BucketRefs, status = Status1,
 				end_date = EndDate1, start_date = StartDate1} = _Product]
 				when ((Status1 == active) orelse (Status1 == undefined)),
 						((StartDate1 =< Now) or (StartDate1 == undefined)),
 						((EndDate1 > Now) or (EndDate1 == undefined)) ->
-			Buckets = lists:flatten([mnesia:read(bucket, Id, sticky_write) || Id <- BucketRefs]),
+			Buckets = lists:flatten([mnesia:read(bucket,
+					Id, BucketLock) || Id <- BucketRefs]),
 			F = fun({'Session-Id', _}) ->
 					true;
 				({?AcctSessionId, _}) ->
