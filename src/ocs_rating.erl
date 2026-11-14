@@ -213,35 +213,35 @@ rate(Protocol, ServiceType, ServiceId, ChargingKey,
 				mnesia:abort(service_not_found)
 	end,
 	case mnesia:transaction(F, [SubscriberIDs], infinity) of
-		{atomic, {{ok, Sub, Rated, DeletedBuckets, AccBalance}, _}}
+		{atomic, {{ok, Service1, Rated, DeletedBuckets, AccBalance}, _}}
 				when is_list(Rated) ->
 			ok = send_notifications(DeletedBuckets),
 			ok = notify_accumulated_balance(AccBalance),
-			{ok, Sub, Rated};
-		{atomic, {{ok, Sub, Granted, Rated, DeletedBuckets, AccBalance}, _}}
+			{ok, Service1, Rated};
+		{atomic, {{ok, Service1, Granted, Rated, DeletedBuckets, AccBalance}, _}}
 				when is_list(Rated) ->
 			ok = send_notifications(DeletedBuckets),
 			ok = notify_accumulated_balance(AccBalance),
-			{ok, Sub, Granted, Rated};
-		{atomic, {{out_of_credit, SL, Rated,
+			{ok, Service1, Granted, Rated};
+		{atomic, {{out_of_credit, SessionList, Rated,
 				DeletedBuckets, AccBalance}, RedirectServerAddress}} ->
 			ok = send_notifications(DeletedBuckets),
 			ok = notify_accumulated_balance(AccBalance),
-			{out_of_credit, RedirectServerAddress, SL, Rated};
-		{atomic, {{grant, Sub, {_Units, Amount} = Granted, DeletedBuckets,
+			{out_of_credit, RedirectServerAddress, SessionList, Rated};
+		{atomic, {{grant, Service1, {_Units, Amount} = Granted, DeletedBuckets,
 				AccBalance}, _}} when is_integer(Amount) ->
 			ok = send_notifications(DeletedBuckets),
 			ok = notify_accumulated_balance(AccBalance),
-			{ok, Sub, Granted};
-		{atomic, {{out_of_credit, SL,
+			{ok, Service1, Granted};
+		{atomic, {{out_of_credit, SessionList,
 				DeletedBuckets, AccBalance}, RedirectServerAddress}} ->
 			ok = send_notifications(DeletedBuckets),
 			ok = notify_accumulated_balance(AccBalance),
-			{out_of_credit, RedirectServerAddress, SL};
-		{atomic, {{disabled, SL, DeletedBuckets, AccBalance}, _}} ->
+			{out_of_credit, RedirectServerAddress, SessionList};
+		{atomic, {{disabled, SessionList, DeletedBuckets, AccBalance}, _}} ->
 			ok = send_notifications(DeletedBuckets),
 			ok = notify_accumulated_balance(AccBalance),
-			{disabled, SL};
+			{disabled, SessionList};
 		{atomic, {{pla_ref, Price}, _}} ->
 			{ok,  {pla_ref, Price}};
 		{aborted, Reason} ->
@@ -541,35 +541,35 @@ charge(Protocol, Flag, SubscriberIDs, ServiceId, ChargingKey,
 				mnesia:abort(service_not_found)
 	end,
 	case mnesia:transaction(F, [SubscriberIDs], infinity) of
-		{atomic, {{ok, Sub, Rated, DeletedBuckets, AccBalance}, _}}
+		{atomic, {{ok, Service1, Rated, DeletedBuckets, AccBalance}, _}}
 				when is_list(Rated) ->
 			ok = send_notifications(DeletedBuckets),
 			ok = notify_accumulated_balance(AccBalance),
-			{ok, Sub, Rated};
-		{atomic, {{ok, Sub, Granted, Rated, DeletedBuckets, AccBalance}, _}}
+			{ok, Service1, Rated};
+		{atomic, {{ok, Service1, Granted, Rated, DeletedBuckets, AccBalance}, _}}
 				when is_list(Rated) ->
 			ok = send_notifications(DeletedBuckets),
 			ok = notify_accumulated_balance(AccBalance),
-			{ok, Sub, Granted, Rated};
-		{atomic, {{out_of_credit, SL, Rated,
+			{ok, Service1, Granted, Rated};
+		{atomic, {{out_of_credit, SessionList, Rated,
 				DeletedBuckets, AccBalance}, RedirectServerAddress}} ->
 			ok = send_notifications(DeletedBuckets),
 			ok = notify_accumulated_balance(AccBalance),
-			{out_of_credit, RedirectServerAddress, SL, Rated};
-		{atomic, {{grant, Sub, {_Units, Amount} = Granted, DeletedBuckets,
+			{out_of_credit, RedirectServerAddress, SessionList, Rated};
+		{atomic, {{grant, Service1, {_Units, Amount} = Granted, DeletedBuckets,
 				AccBalance}, _}} when is_integer(Amount) ->
 			ok = send_notifications(DeletedBuckets),
 			ok = notify_accumulated_balance(AccBalance),
-			{ok, Sub, Granted};
-		{atomic, {{out_of_credit, SL,
+			{ok, Service1, Granted};
+		{atomic, {{out_of_credit, SessionList,
 				DeletedBuckets, AccBalance}, RedirectServerAddress}} ->
 			ok = send_notifications(DeletedBuckets),
 			ok = notify_accumulated_balance(AccBalance),
-			{out_of_credit, RedirectServerAddress, SL};
-		{atomic, {{disabled, SL, DeletedBuckets, AccBalance}, _}} ->
+			{out_of_credit, RedirectServerAddress, SessionList};
+		{atomic, {{disabled, SessionList, DeletedBuckets, AccBalance}, _}} ->
 			ok = send_notifications(DeletedBuckets),
 			ok = notify_accumulated_balance(AccBalance),
-			{disabled, SL};
+			{disabled, SessionList};
 		{aborted, Reason} ->
 			{error, Reason}
 	end.
