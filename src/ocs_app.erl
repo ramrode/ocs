@@ -130,7 +130,7 @@ start5() ->
 start6() ->
 	case inets:services_info() of
 		ServicesInfo when is_list(ServicesInfo) ->
-			{ok, Profile} = application:get_env(hub_profile),
+			{ok, Profile} = application:get_env(ocs, hub_profile),
 			start7(Profile, ServicesInfo);
 		{error, Reason} ->
 			{error, Reason}
@@ -154,7 +154,7 @@ start7(Profile, []) ->
 	end.
 %% @hidden
 start8(Profile) ->
-	{ok, Options} = application:get_env(hub_options),
+	{ok, Options} = application:get_env(ocs, hub_options),
 	case httpc:set_options(Options, Profile) of
 		ok ->
 			start9();
@@ -165,7 +165,7 @@ start8(Profile) ->
 start9() ->
 	case inets:services_info() of
 		ServicesInfo when is_list(ServicesInfo) ->
-			{ok, Profile} = application:get_env(nrf_profile),
+			{ok, Profile} = application:get_env(ocs, nrf_profile),
 			start10(Profile, ServicesInfo);
 		{error, Reason} ->
 			{error, Reason}
@@ -189,7 +189,7 @@ start10(Profile, []) ->
 	end.
 %% @hidden
 start11(Profile) ->
-	{ok, Options} = application:get_env(nrf_options),
+	{ok, Options} = application:get_env(ocs, nrf_options),
 	case httpc:set_options(Options, Profile) of
 		ok ->
 			start12();
@@ -232,9 +232,9 @@ start14() ->
 	start15().
 %% @hidden
 start15() ->
-	{ok, CdrLogs} = application:get_env(cdr_logs),
-	CdrLogs1 = case {application:get_env(acct_log_rotate_time),
-			application:get_env(acct_log_rotate)} of
+	{ok, CdrLogs} = application:get_env(ocs, cdr_logs),
+	CdrLogs1 = case {application:get_env(ocs, acct_log_rotate_time),
+			application:get_env(ocs, acct_log_rotate)} of
 		% IPDR is deprecated, use CDR
 		{undefined, undefined} ->
 			CdrLogs;
@@ -251,8 +251,8 @@ start15() ->
 	start16(CdrLogs1).
 %% @hidden
 start16(CdrLogs) ->
-	{ok, RadiusConfig} = application:get_env(radius),
-	{ok, DiameterConfig} = application:get_env(diameter),
+	{ok, RadiusConfig} = application:get_env(ocs, radius),
+	{ok, DiameterConfig} = application:get_env(ocs, diameter),
 	RadAuthInstances = case lists:keyfind(auth, 1, RadiusConfig) of
 		{auth, I1} ->
 			I1;
@@ -363,7 +363,7 @@ start18(Sup) ->
 start19(Sup) ->
 	case inets:services_info() of
 		ServicesInfo when is_list(ServicesInfo) ->
-			case application:get_env(elastic_shipper) of
+			case application:get_env(ocs, elastic_shipper) of
 				{ok, undefined} ->
 					{ok, Sup};
 				{ok, {Url, Profile, Options}} ->

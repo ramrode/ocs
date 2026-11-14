@@ -139,7 +139,7 @@ idle({call, From} = _EventType, EventContent,
 				[H | _] = binary:split(PermanentID, <<$@>>, []),
 				H;
 			<<?TEMP_AKA:6, _/bits>> ->
-				{ok, Keys} = application:get_env(aka_kpseu),
+				{ok, Keys} = application:get_env(ocs, aka_kpseu),
 				[Pseudonym | _] = binary:split(Identity, <<$@>>, []),
 				CompressedIMSI = ocs_eap_aka:decrypt_imsi(Pseudonym, Keys),
 				ocs_eap_aka:compressed_imsi(CompressedIMSI)

@@ -96,7 +96,7 @@ start_link() ->
 %% @private
 %%
 init(_Args) ->
-	{ok, I} = application:get_env(statistics_interval),
+	{ok, I} = application:get_env(ocs, statistics_interval),
 	Interval = I * 1000,
 	Now = erlang:monotonic_time(millisecond),
 	N = erlang:unique_integer([positive]),

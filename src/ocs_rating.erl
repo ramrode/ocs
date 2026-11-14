@@ -3128,7 +3128,7 @@ reserve_amount(octets = _Units, UnitSize) ->
 			Value
 	end;
 reserve_amount(seconds = _Units, UnitSize) ->
-	case application:get_env(ocs,min_reserve_seconds) of
+	case application:get_env(ocs, min_reserve_seconds) of
 		{ok, Value} when Value < UnitSize ->
 			UnitSize;
 		{ok, Value} ->

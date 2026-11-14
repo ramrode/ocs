@@ -99,8 +99,8 @@ init([ServiceName, ServerAddress, ServerPort, ClientAddress,
 		ClientPort, SessionId, OriginHost, OriginRealm,
 		_DestinationHost, _DestinationRealm] = _Args) ->
 	process_flag(trap_exit, true),
-	{ok, HssRealm} = application:get_env(hss_realm),
-	HssHost = case application:get_env(hss_host) of
+	{ok, HssRealm} = application:get_env(ocs, hss_realm),
+	HssHost = case application:get_env(ocs, hss_host) of
 		{ok, undefined} ->
 			[];
 		{ok, HH} ->

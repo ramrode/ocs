@@ -35,8 +35,8 @@
 		Reason :: term().
 %% @equiv start(Interval)
 start() ->
-	{ok, ScheduledTime} = application:get_env(charging_scheduler_time),
-	{ok, Interval} = application:get_env(charging_interval),
+	{ok, ScheduledTime} = application:get_env(ocs, charging_scheduler_time),
+	{ok, Interval} = application:get_env(ocs, charging_interval),
 	start(ScheduledTime, Interval).
 
 -spec start(ScheduledTime, Interval) -> Result

@@ -146,7 +146,7 @@ callback_mode() ->
 init([Sup, diameter, ServerAddress, ServerPort, ClientAddress, ClientPort,
 		PasswordReq, Trusted, SessionId, ApplicationId, AuthReqType, OHost, ORealm,
 		DHost, DRealm, Request, _Options] = _Args) ->
-	{ok, Keys} = application:get_env(aka_kpseu),
+	{ok, Keys} = application:get_env(ocs, aka_kpseu),
 	case global:whereis_name({ocs_diameter_auth,
 			node(), ServerAddress, ServerPort}) of
 		undefined ->
@@ -174,7 +174,7 @@ init([Sup, diameter, ServerAddress, ServerPort, ClientAddress, ClientPort,
 init([Sup, radius, ServerAddress, ServerPort, ClientAddress, ClientPort,
 		RadiusFsm, Secret, PasswordReq, Trusted, SessionId,
 		#radius{attributes = Attributes} = AccessRequest] = _Args) ->
-	{ok, Keys} = application:get_env(aka_kpseu),
+	{ok, Keys} = application:get_env(ocs, aka_kpseu),
 	ServiceType = case radius_attributes:find(?ServiceType, Attributes) of
 		{error, not_found} ->
 			undefined;

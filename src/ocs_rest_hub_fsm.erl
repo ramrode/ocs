@@ -121,14 +121,14 @@ callback_mode() ->
 %%
 init([Id, Query, Callback, Uri] = _Args) ->
 	process_flag(trap_exit, true),
-	{ok, Profile} = application:get_env(hub_profile),
+	{ok, Profile} = application:get_env(ocs, hub_profile),
 	Data = #statedata{id = Id, profile = Profile,
 			query = Query, callback = Callback, href = Uri ++ Id},
 	Action = {next_event, internal, start},
 	{ok, register, Data, Action};
 init([Id, Query, Callback, Uri, Authorization] = _Args) ->
 	process_flag(trap_exit, true),
-	{ok, Profile} = application:get_env(hub_profile),
+	{ok, Profile} = application:get_env(ocs, hub_profile),
 	Data = #statedata{id = Id, profile = Profile,
 			query = Query, callback = Callback, href = Uri ++ Id,
 			authorization = Authorization},

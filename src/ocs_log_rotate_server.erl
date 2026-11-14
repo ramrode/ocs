@@ -110,7 +110,7 @@ init([Type, ScheduledTime, Interval] = _Args) ->
 %% @private
 %%
 handle_continue(init = _Info, #state{type = chf} = State) ->
-	{ok, Directory} = application:get_env(cdr_log_dir),
+	{ok, Directory} = application:get_env(ocs, cdr_log_dir),
 	case file:make_dir(Directory) of
 		ok ->
 			handle_continue1(Directory, State);
@@ -122,7 +122,7 @@ handle_continue(init = _Info, #state{type = chf} = State) ->
 %% deprecated
 handle_continue(init = _Info, #state{type = Type} = State)
 		when Type == wlan; Type == voip ->
-	{ok, Directory} = application:get_env(ipdr_log_dir),
+	{ok, Directory} = application:get_env(ocs, ipdr_log_dir),
 	case file:make_dir(Directory) of
 		ok ->
 			handle_continue1(Directory, State);
