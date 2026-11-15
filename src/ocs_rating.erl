@@ -21,10 +21,9 @@
 -module(ocs_rating).
 -copyright('Copyright (c) 2016 - 2026 SigScale Global Inc.').
 
--export([rate/13, charge/11]).
--export([authorize/8]).
+%% export the public API
+-export([rate/13, charge/11, authorize/8]).
 -export([session_attributes/1]).
--export([filter_prices_tod/2, filter_prices_key/2]).
 
 -include("ocs.hrl").
 -include("ocs_log.hrl").
@@ -3654,28 +3653,28 @@ delete_b([BRef | T]) ->
 delete_b([]) ->
 	ok.
 
-%% @private
+%% @hidden
 make_lm() ->
 	{erlang:system_time(millisecond), erlang:unique_integer([positive])}.
 
-%% @private
+%% @hidden
 make_id({TS, N}) ->
 	integer_to_list(TS) ++ "-" ++ integer_to_list(N).
 
-%% @private
+%% @hidden
 send_notifications([]) ->
 	ok;
 send_notifications([DeletedBucket | T]) ->
 	ocs_event:notify(depleted, DeletedBucket, balance),
 	send_notifications(T).
 
-%% @private
+%% @hidden
 notify_accumulated_balance([]) ->
 	ok;
 notify_accumulated_balance(AccBalance) ->
 	ocs_event:notify(accumulated, AccBalance, balance).
 
-%% @private
+%% @hidden
 accumulated_balance(Buckets, ProdRef) ->
 	F = fun(UnitThresholdName) ->
 			case application:get_env(ocs, UnitThresholdName) of
@@ -3688,6 +3687,7 @@ accumulated_balance(Buckets, ProdRef) ->
 	UnitThresholdNames = [threshold_cents, threshold_bytes,
 			threshold_seconds, threshold_messages],
 	accumulated_balance(Buckets, ProdRef, lists:any(F, UnitThresholdNames)).
+%% @hidden
 accumulated_balance(_Buckets, _ProdRef, false) ->
 	[];
 accumulated_balance(Buckets, ProdRef, true) when is_list(Buckets) ->
@@ -3748,7 +3748,7 @@ accumulated_balance(Buckets, ProdRef, true) when is_list(Buckets) ->
 	end,
 	AccBalance3.
 
-%% @private
+%% @hidden
 build_acc(_Buckets, _Name, _Units, _ProdRef, {ok, undefined}, AccBalance) ->
 	AccBalance;
 build_acc(Buckets, Name, Units, ProdRef, {ok, UnitThreshold}, AccBalance)
