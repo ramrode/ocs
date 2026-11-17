@@ -22,7 +22,7 @@
 -copyright('Copyright (c) 2016 - 2026 SigScale Global Inc.').
 
 %% export the public API
--export([rate/13, charge/11, authorize/8]).
+-export([rate/10, rate/13, charge/11, authorize/8]).
 -export([session_attributes/1]).
 
 -include("ocs.hrl").
@@ -30,6 +30,26 @@
 -include_lib("radius/include/radius.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
+-export_type([mscc_amount/0, mscc_usage/0, mscc_result/0]).
+
+-type mscc_amount() ::
+		{UnitType :: octets | seconds | messages, Amount :: non_neg_integer()}.
+-type mscc_usage() :: #{
+		rating_group => 0..4294967295,
+		service_id => 0..4294967295,
+		debit => [mscc_amount()],
+		reserve => [mscc_amount()]}.
+-type mscc_result() :: #{
+		result := success
+				| quota_limit_reached
+				| quota_management_not_applicable
+				| end_user_service_denied
+				| end_user_service_rejected
+				| rating_failed,
+		rating_group => 0..4294967295,
+		service_id => 0..4294967295,
+		grant => [mscc_amount()],
+		price => #price{}}.
 -type bucket() :: #bucket{}.
 
 % calendar:datetime_to_gregorian_seconds({{1970,1,1},{0,0,0}})
@@ -46,6 +66,268 @@
 -define(SMS, 32274).
 -define(VCS, 32276).
 -define(MMTel, 32275).
+
+-spec rate(Protocol, ServiceType, ServiceNetwork, SubscriberIDs,
+		Timestamp, Address, Direction, Flag, SessionAttributes,
+		ServiceUsage) -> Result
+	when
+		Protocol :: radius | diameter | nrf,
+		ServiceType :: ?RADIUSLOGIN | ?RADIUSFRAMED | ?RADIUSVOICE
+				| ?PSDATA | ?'5GCDATA' | ?IMSVOICE | ?VCS | ?MMTel | ?SMS | binary(),
+		ServiceNetwork :: string() | binary() | undefined,
+		SubscriberIDs :: [SubscriberID],
+		SubscriberID :: string() | binary(),
+		Timestamp :: calendar:datetime(),
+		Address :: string() | binary() | undefined,
+		Direction :: answer | originate | undefined,
+		Flag :: initial | interim | final | event,
+		SessionAttributes :: [tuple()],
+		ServiceUsage :: [mscc_usage()],
+		Result :: {ok, ServiceRating}
+				| {ok, ServiceRating, Rated}
+				| {error, Reason}
+				| {error, Reason, SessionList},
+%				| {error, Reason, SessionList, Rated},
+		ServiceRating :: [mscc_result()],
+		Rated :: [#rated{}],
+		SessionList :: [{TS :: pos_integer(), SessionAttributes}],
+		Reason :: offer_not_found
+				| product_not_found
+				| service_not_found
+				| invalid_service_type
+				| invalid_bundle_product
+				| out_of_credit
+				| end_user_service_denied
+				| end_user_service_rejected
+				| user_unknown
+				| term().
+%% @doc Rating and charging of multiple services.
+%%
+%% 	Performs multiple services credit control (MSCC) within
+%% 	a single transaction with cluster wide ACID
+%% 	(atomicity, consistency, isolation, durability) guarantees.
+%%
+%% 	Serice usage for each <i>Rating Group</i> (<i>Charging Key</i>)
+%% 	is described in an `mscc_usage()' within `ServiceUsage'. The
+%% 	result for each <i>Rating Group</i> is reported in an
+%% 	`mscc_result()' within `ServiceRating'.
+%%
+%% 	A successful request returns `{ok, ServiceRating}', or
+%% 	`{ok, ServiceRating, Rated}' when `Flag' is `final' or `event'.
+%%
+%% 	A failed request returns `{error, Reason}' or
+%% 	`{error, Reason, SessionList}' when `Reason' is
+%% 	`out_of_credit' or `end_user_service_denied' in which
+%% 	case `SessionList' identifies the set of active sessions
+%% 	for the current `SubscriberID', which may be used to initiate
+%% 	re-authenticate or session terminate requests.
+%%
+%% 	Note: An `{ok, ServiceRating, [Rated]}' indicates only that
+%% 	a `ServiceRating' was constructed successfully, the result
+%% 	for some or all <i>Rating Groups</i> may be unsuccessful
+%% 	(i.e. `out_of_credit').
+%%
+rate(Protocol, ServiceType, ServiceNetwork, SubscriberIDs,
+		{{_, _, _}, {_, _, _}} = Timestamp, Address, Direction,
+		Flag, SessionAttributes, ServiceUsage)
+		when ((Protocol == radius)
+				or (Protocol == diameter) or (Protocol == nrf)),
+		((ServiceNetwork == undefined) orelse is_binary(ServiceNetwork)
+				orelse is_list(ServiceNetwork)),
+		length(SubscriberIDs) > 0,
+		((Address == undefined) orelse is_binary(Address)
+				orelse is_list(Address)),
+		((Direction == answer) or (Direction == originate)
+				or (Direction == undefined)),
+		((Flag == initial) or (Flag == interim)
+				or (Flag == final) or (Flag == event)),
+		length(ServiceUsage) > 0,
+		length(SessionAttributes) > 0 ->
+	{ok, StickyLocks} = application:get_env(ocs, sticky_locks),
+	ServiceLock = case maps:get(service, StickyLocks, true) of
+		true ->
+			sticky_write;
+		false ->
+			write
+	end,
+	BucketLock = case maps:get(bucket, StickyLocks, true) of
+		true ->
+			sticky_write;
+		false ->
+			write
+	end,
+	F = fun F([SubscriberID | T]) when is_list(SubscriberID) ->
+				F([list_to_binary(SubscriberID) | T]);
+			F([SubscriberID | T]) when is_binary(SubscriberID) ->
+				case mnesia:read(service, SubscriberID, ServiceLock) of
+					[#service{product = ProdRef} = Service] ->
+						case mnesia:read(product, ProdRef, read) of
+							[#product{product = OfferId,
+									balance = BucketRefs} = Product] ->
+								Now = erlang:system_time(millisecond),
+								case mnesia:dirty_read(offer, OfferId) of
+									[#offer{end_date = EndDate, start_date = StartDate} = Offer]
+											when ((StartDate =< Now) or (StartDate == undefined)),
+													((EndDate > Now) or (EndDate == undefined)) ->
+										Buckets = lists:flatten([mnesia:read(bucket, Id, BucketLock)
+												|| Id <- BucketRefs]),
+										rate_mscc(Protocol, ServiceType, ServiceNetwork,
+												Timestamp, Address, Direction, Flag,
+												SessionAttributes, Service, Offer, Product,
+												Buckets, ServiceUsage);
+									_ ->
+										mnesia:abort(offer_not_found)
+								end;
+							[] ->
+								mnesia:abort(product_not_found)
+						end;
+					[] ->
+						F(T)
+				end;
+			F([]) ->
+				mnesia:abort(service_not_found)
+	end,
+	case mnesia:transaction(F, [SubscriberIDs], infinity) of
+		{atomic, {ok, ServiceRating, [] = _Rated,
+				DeletedBuckets, AccBalance}} ->
+			ok = send_notifications(DeletedBuckets),
+			ok = notify_accumulated_balance(AccBalance),
+			{ok, ServiceRating};
+		{atomic, {ok, ServiceRating, Rated,
+				DeletedBuckets, AccBalance}} ->
+			ok = send_notifications(DeletedBuckets),
+			ok = notify_accumulated_balance(AccBalance),
+			{ok, ServiceRating, Rated};
+		{atomic, {error, Reason, SessionList, [] = _Rated,
+				DeletedBuckets, AccBalance}} ->
+			ok = send_notifications(DeletedBuckets),
+			ok = notify_accumulated_balance(AccBalance),
+			{error, Reason, SessionList};
+		{atomic, {error, Reason, SessionList, Rated,
+				DeletedBuckets, AccBalance}} ->
+			ok = send_notifications(DeletedBuckets),
+			ok = notify_accumulated_balance(AccBalance),
+			{error, Reason, SessionList, Rated};
+		{aborted, Reason} ->
+			{error, Reason}
+	end.
+%% @hidden
+rate_mscc(Protocol, ServiceType, ServiceNetwork, Timestamp,
+		Address, Direction, Flag, SessionId,
+		Service, Offer, Product, Buckets, ServiceUsage) ->
+	rate_mscc(Protocol, ServiceType, ServiceNetwork, Timestamp,
+		Address, Direction, Flag, SessionId, Service, Offer, Product,
+		Buckets, Buckets, ServiceUsage, [], [], undefined).
+%% @hidden
+rate_mscc(Protocol, ServiceType, ServiceNetwork,
+		Timestamp, Address, Direction, Flag, SessionId,
+		#service{enabled = Enabled} = Service,
+		Offer, Product, Buckets, NewBuckets,
+		[H | T] = _ServiceUsage,
+		AccRating, AccRated, Reason) ->
+	ServiceId = maps:get(service_id, H, undefined),
+	ChargingKey = maps:get(rating_group, H, undefined),
+	DebitAmounts = maps:get(debit, H, []),
+	ReserveAmounts = maps:get(reserve, H, undefined),
+	ServiceRating = maps:with([rating_group, service_id], H),
+	case rate2(Protocol, Enabled, ServiceId, Product, NewBuckets,
+			Timestamp, Address, Direction, Offer, Flag,
+			DebitAmounts, ReserveAmounts, ServiceType, SessionId,
+			ChargingKey, ServiceNetwork) of
+		{ok, Granted, Rated, NextBuckets} ->
+			AccRating1 = [ServiceRating#{result => success,
+					grant => [Granted]} | AccRating],
+			AccRated1 = [Rated | AccRated],
+			rate_mscc(Protocol, ServiceType, ServiceNetwork,
+					Timestamp, Address, Direction, Flag, SessionId,
+					Service, Offer, Product, Buckets, NextBuckets,
+					T, AccRating1, AccRated1, Reason);
+		{out_of_credit, Rated, NextBuckets} ->
+			AccRating1 = [ServiceRating#{result => quota_limit_reached}
+					| AccRating],
+			AccRated1 = [Rated | AccRated],
+			rate_mscc(Protocol, ServiceType, ServiceNetwork,
+					Timestamp, Address, Direction, Flag, SessionId,
+					Service, Offer, Product, Buckets, NextBuckets,
+					T, AccRating1, AccRated1, Reason);
+		{disabled, NextBuckets} ->
+			rate_mscc(Protocol, ServiceType, ServiceNetwork,
+					Timestamp, Address, Direction, Flag, SessionId,
+					Service, Offer, Product, Buckets, NextBuckets,
+					T, AccRating, AccRated, end_user_service_denied);
+		{pla_ref, Price} ->
+			AccRating1 = [ServiceRating#{result => success,
+					price => Price} | AccRating],
+			rate_mscc(Protocol, ServiceType, ServiceNetwork,
+					Timestamp, Address, Direction, Flag, SessionId,
+					Service, Offer, Product, Buckets, NewBuckets,
+					T, AccRating1, AccRated, Reason)
+	end;
+rate_mscc(_Protocol, _ServiceType, _ServiceNetwork,
+		_Timestamp, _Address, _Direction,
+		initial = _Flag, SessionId,
+		#service{session_attributes = SessionList} = Service,
+		_Offer,
+		#product{id = ProductId, balance = BucketRefs} = Product,
+		Buckets, NewBuckets,
+		[] = _ServiceUsage,
+		AccRating, [] = AccRated, undefined = _Reason) ->
+	case add_session(SessionId, SessionList) of
+		SessionList ->
+			ok;
+		NewSessionList ->
+			Service1 = Service#service{session_attributes = NewSessionList},
+			ok = mnesia:write(Service1)
+	end,
+	AccRating1 = lists:reverse(AccRating),
+	{NewBucketRefs, DeletedBuckets} = update_buckets(BucketRefs,
+			Buckets, NewBuckets),
+	case NewBucketRefs /= BucketRefs of
+		true ->
+			ok = mnesia:write(Product#product{balance = NewBucketRefs});
+		false ->
+			ok
+	end,
+	AccBalance = accumulated_balance(NewBuckets, ProductId),
+	{ok, AccRating1, AccRated, DeletedBuckets, AccBalance};
+rate_mscc(_Protocol, _ServiceType, _ServiceNetwork,
+		_Timestamp, _Address, _Direction, _Flag, _SessionId,
+		_Service, _Offer,
+		#product{id = ProductId, balance = BucketRefs} = Product,
+		Buckets, NewBuckets,
+		[] = _ServiceUsage,
+		AccRating, AccRated, undefined = _Reason) ->
+	AccRating1 = lists:reverse(AccRating),
+	AccRated1 = lists:flatten(lists:reverse(AccRated)),
+	{NewBucketRefs, DeletedBuckets} = update_buckets(BucketRefs,
+			Buckets, NewBuckets),
+	case NewBucketRefs /= BucketRefs of
+		true ->
+			ok = mnesia:write(Product#product{balance = NewBucketRefs});
+		false ->
+			ok
+	end,
+	AccBalance = accumulated_balance(NewBuckets, ProductId),
+	{ok, AccRating1, AccRated1, DeletedBuckets, AccBalance};
+rate_mscc(_Protocol, _ServiceType, _ServiceNetwork,
+		_Timestamp, _Address, _Direction, _Flag, _SessionId,
+		#service{session_attributes = SessionList} = _Service,
+		_Offer,
+		#product{id = ProductId, balance = BucketRefs} = Product,
+		Buckets, NewBuckets,
+		[] = _ServiceUsage,
+		_AccRating, AccRated, Reason) when Reason /= undefined ->
+	AccRated1 = lists:flatten(lists:reverse(AccRated)),
+	{NewBucketRefs, DeletedBuckets} = update_buckets(BucketRefs,
+			Buckets, NewBuckets),
+	case NewBucketRefs /= BucketRefs of
+		true ->
+			ok = mnesia:write(Product#product{balance = NewBucketRefs});
+		false ->
+			ok
+	end,
+	AccBalance = accumulated_balance(NewBuckets, ProductId),
+	{error, Reason, SessionList, AccRated1, DeletedBuckets, AccBalance}.
 
 -spec rate(Protocol, ServiceType, ServiceId, ChargingKey,
 		ServiceNetwork, SubscriberIDs, Timestamp, Address, Direction,
@@ -86,6 +368,9 @@
 				| service_not_found | invalid_service_type
 				| invalid_bundle_product | term().
 %% @doc Handle rating and balance management for used and reserved unit amounts.
+%%
+%% 	Performs a credit control transaction with cluster wide ACID
+%% 	(atomicity, consistency, isolation, durability) guarantees.
 %%
 %% 	Subscriber balance buckets are permanently reduced by the
 %% 	amount in `DebitAmounts' and bucket reservations are made
@@ -143,7 +428,8 @@ rate(Protocol, ServiceType, ServiceId, ChargingKey,
 		{{_, _, _}, {_, _, _}} = Timestamp, Address,
 		Direction, Flag, DebitAmounts, ReserveAmounts,
 		SessionAttributes)
-		when ((Protocol == radius) or (Protocol == diameter) or (Protocol == nrf)),
+		when ((Protocol == radius)
+				or (Protocol == diameter) or (Protocol == nrf)),
 		(is_integer(ChargingKey) or (ChargingKey == undefined)),
 		((ServiceNetwork == undefined) orelse is_binary(ServiceNetwork)
 				orelse is_list(ServiceNetwork)),
@@ -3732,7 +4018,7 @@ update_buckets(BRefs, OldB, NewB) ->
 				Acc
 	end,
 	DeletedBuckets = Fdel(DeletedBRefs, []),
-	update_b(UpdatedB),
+	ok = update_b(UpdatedB),
 	ok = delete_b(DeletedBRefs),
 	{AllNewKeys, DeletedBuckets}.
 
