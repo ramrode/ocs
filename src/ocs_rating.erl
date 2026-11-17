@@ -2385,8 +2385,10 @@ session_attributes(Attributes) ->
 %% 	The `Reserve' amount is not additive, the `Reserved'
 %% 	amount is the new total reservation.
 %%
-%% 	3GPP RS 32.299 6.3.8 Support of re-authorization:
-%% 	"New quota allocations [...] override any remaining held quota"
+%% 	See <cite>3GPP TS 32.299 6.3.8 Support of re-authorization</cite>:
+%% 	<blockquote cite="https://webapp.etsi.org/key/key.asp?GSMSpecPart1=32&amp;GSMSpecPart2=299">
+%% 		New quota allocations [...] override any remaining held quota
+%% 	</blockquote>
 %%
 %% @private
 update_session(Type, Charge, Reserve,
