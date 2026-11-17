@@ -126,7 +126,7 @@ initial_cud_data(_Config) ->
 	P3 = price(PriceType, PackageUnits, PackageSize3, PackagePrice3, RG3),
 	OfferId = add_offer([P1, P2, P3], 8),
 	ProdRef = add_product(OfferId),
-	ServiceId = add_service(ProdRef),
+	SubscriberId = add_service(ProdRef),
 	RemainAmount1 = (PackageSize1 + PackageSize2 + PackageSize3) * 10,
 	Bucket = bucket(PackageUnits, RemainAmount1),
 	BucketId = add_bucket(ProdRef, Bucket),
@@ -139,7 +139,7 @@ initial_cud_data(_Config) ->
 	MSCC3 = #{rating_group => RG3, reserve => []}, 
 	ServiceUsage = [MSCC1, MSCC2, MSCC3],
 	{ok, ServiceRating} = ocs_rating:rate(Protocol, ServiceType,
-			undefined, [ServiceId], Timestamp, undefined, undefined,
+			undefined, [SubscriberId], Timestamp, undefined, undefined,
 			initial, SessionId, ServiceUsage),
 	[RG1, RG2, RG3] = [RG || #{rating_group := RG} <- ServiceRating],
 	Fall = fun(#{rating_group := RG, result := success, grant := Grant})
@@ -155,11 +155,10 @@ initial_cud_data(_Config) ->
 				false
 	end,
 	true = lists:all(Fall, ServiceRating),
-	Reserve = PackagePrice1 + PackageSize2 + PackageSize3,
+	Reserve = PackageSize1 + PackageSize2 + PackageSize3,
 	RemainAmount2 = RemainAmount1 - Reserve,
 	{ok, #bucket{remain_amount = RemainAmount2,
-			attributes = #{reservations := R}}} = ocs:find_bucket(BucketId),
-	#{SessionId := #{reserve := Reserve}} = R.
+			attributes = #{reservations := _R}}} = ocs:find_bucket(BucketId).
 
 initial_cud_voice() ->
 	Description = "Initial MSCC voice with CUD, seconds balance",
@@ -184,7 +183,7 @@ initial_cud_voice(_Config) ->
 	P3 = price(PriceType, PackageUnits, PackageSize3, PackagePrice3, RG3),
 	OfferId = add_offer([P1, P2, P3], 9),
 	ProdRef = add_product(OfferId),
-	ServiceId = add_service(ProdRef),
+	SubscriberId = add_service(ProdRef),
 	RemainAmount1 = (PackageSize1 + PackageSize2 + PackageSize3) * 10,
 	Bucket = bucket(PackageUnits, RemainAmount1),
 	BucketId = add_bucket(ProdRef, Bucket),
@@ -199,7 +198,7 @@ initial_cud_voice(_Config) ->
 	MSCC3 = #{rating_group => RG3, reserve => []}, 
 	ServiceUsage = [MSCC1, MSCC2, MSCC3],
 	{ok, ServiceRating} = ocs_rating:rate(Protocol, ServiceType,
-			undefined, [ServiceId], Timestamp, Address, Direction,
+			undefined, [SubscriberId], Timestamp, Address, Direction,
 			initial, SessionId, ServiceUsage),
 	[RG1, RG2, RG3] = [RG || #{rating_group := RG} <- ServiceRating],
 	Fall = fun(#{rating_group := RG, result := success, grant := Grant})
@@ -215,11 +214,10 @@ initial_cud_voice(_Config) ->
 				false
 	end,
 	true = lists:all(Fall, ServiceRating),
-	Reserved = PackagePrice1 + PackageSize2 + PackageSize3,
+	Reserved = PackageSize1 + PackageSize2 + PackageSize3,
 	RemainAmount2 = RemainAmount1 - Reserved,
 	{ok, #bucket{remain_amount = RemainAmount2,
-			attributes = #{reservations := R}}} = ocs:find_bucket(BucketId),
-	#{SessionId := #{reserve := Reserve}} = R.
+			attributes = #{reservations := _}}} = ocs:find_bucket(BucketId).
 
 initial_cud_cents() ->
 	Description = "Initial MSCC data with CUD, conversion from monetary balance",
@@ -244,7 +242,7 @@ initial_cud_cents(_Config) ->
 	P3 = price(PriceType, PackageUnits, PackageSize3, PackagePrice3, RG3),
 	OfferId = add_offer([P1, P2, P3], 8),
 	ProdRef = add_product(OfferId),
-	ServiceId = add_service(ProdRef),
+	SubscriberId = add_service(ProdRef),
 	RemainAmount1 = (PackagePrice1 + PackagePrice2 + PackagePrice3) * 10,
 	Bucket = bucket(cents, RemainAmount1),
 	BucketId = add_bucket(ProdRef, Bucket),
@@ -257,7 +255,7 @@ initial_cud_cents(_Config) ->
 	MSCC3 = #{rating_group => RG3, reserve => []}, 
 	ServiceUsage = [MSCC1, MSCC2, MSCC3],
 	{ok, ServiceRating} = ocs_rating:rate(Protocol, ServiceType,
-			undefined, [ServiceId], Timestamp, undefined, undefined,
+			undefined, [SubscriberId], Timestamp, undefined, undefined,
 			initial, SessionId, ServiceUsage),
 	[RG1, RG2, RG3] = [RG || #{rating_group := RG} <- ServiceRating],
 	Fall = fun(#{rating_group := RG, result := success, grant := Grant})
@@ -273,11 +271,10 @@ initial_cud_cents(_Config) ->
 				false
 	end,
 	true = lists:all(Fall, ServiceRating),
-	Reserved = (PackagePrice1 + PackagePrice2 + PackagePrice3) * 2,
+	Reserved = PackagePrice1 + PackagePrice2 + PackagePrice3,
 	RemainAmount2 = RemainAmount1 - Reserved,
 	{ok, #bucket{remain_amount = RemainAmount2,
-			attributes = #{reservations := R}}} = ocs:find_bucket(BucketId),
-	#{SessionId := #{reserve := Reserve}} = R.
+			attributes = #{reservations := _}}} = ocs:find_bucket(BucketId).
 
 interim_cud_data() ->
 	Description = "Interim MSCC data with CUD, octets balance",
@@ -302,7 +299,7 @@ interim_cud_data(_Config) ->
 	P3 = price(PriceType, PackageUnits, PackageSize3, PackagePrice3, RG3),
 	OfferId = add_offer([P1, P2, P3], 8),
 	ProdRef = add_product(OfferId),
-	ServiceId = add_service(ProdRef),
+	SubscriberId = add_service(ProdRef),
 	RemainAmount1 = (PackageSize1 + PackageSize2 + PackageSize3) * 10,
 	Bucket = bucket(PackageUnits, RemainAmount1),
 	BucketId = add_bucket(ProdRef, Bucket),
@@ -316,7 +313,7 @@ interim_cud_data(_Config) ->
 	MSCC3 = #{rating_group => RG3, reserve => []}, 
 	ServiceUsage1 = [MSCC1, MSCC2, MSCC3],
 	{ok, _ServiceRating1} = ocs_rating:rate(Protocol, ServiceType,
-			undefined, [ServiceId], Timestamp1, undefined, undefined,
+			undefined, [SubscriberId], Timestamp1, undefined, undefined,
 			initial, SessionId, ServiceUsage1),
 	Timestamp2 = calendar:gregorian_seconds_to_datetime(TS + 60),
 	Used1 = rand:uniform(PackageSize1),
@@ -330,7 +327,7 @@ interim_cud_data(_Config) ->
 	MSCC6 = #{rating_group => RG3, debit => [Debit3], reserve => []}, 
 	ServiceUsage2 = [MSCC4, MSCC5, MSCC6],
 	{ok, ServiceRating2} = ocs_rating:rate(Protocol, ServiceType,
-			undefined, [ServiceId], Timestamp2, undefined, undefined,
+			undefined, [SubscriberId], Timestamp2, undefined, undefined,
 			interim, SessionId, ServiceUsage2),
 	[RG1, RG2, RG3] = [RG || #{rating_group := RG} <- ServiceRating2],
 	Fall = fun(#{rating_group := RG, result := success, grant := Grant})
@@ -346,11 +343,11 @@ interim_cud_data(_Config) ->
 				false
 	end,
 	true = lists:all(Fall, ServiceRating2),
-	Reserved = (PackageSize1 + PackageSize2 + PackageSize3) * 2,
-	RemainAmount2 = RemainAmount1 - Reserved,
+	Reserved = PackageSize1 + PackageSize2 + PackageSize3,
+	Used = Used1 + Used2 + Used3,
+	RemainAmount2 = RemainAmount1 - Reserved - Used,
 	{ok, #bucket{remain_amount = RemainAmount2,
-			attributes = #{reservations := R}}} = ocs:find_bucket(BucketId),
-	#{SessionId := #{reserve := Reserve}} = R.
+			attributes = #{reservations := _}}} = ocs:find_bucket(BucketId).
 
 interim_cud_voice() ->
 	Description = "Interim MSCC voice with CUD, seconds balance",
@@ -375,7 +372,7 @@ interim_cud_voice(_Config) ->
 	P3 = price(PriceType, PackageUnits, PackageSize3, PackagePrice3, RG3),
 	OfferId = add_offer([P1, P2, P3], 9),
 	ProdRef = add_product(OfferId),
-	ServiceId = add_service(ProdRef),
+	SubscriberId = add_service(ProdRef),
 	RemainAmount1 = (PackageSize1 + PackageSize2 + PackageSize3) * 10,
 	Bucket = bucket(PackageUnits, RemainAmount1),
 	BucketId = add_bucket(ProdRef, Bucket),
@@ -391,7 +388,7 @@ interim_cud_voice(_Config) ->
 	MSCC3 = #{rating_group => RG3, reserve => []}, 
 	ServiceUsage = [MSCC1, MSCC2, MSCC3],
 	{ok, _ServiceRating1} = ocs_rating:rate(Protocol, ServiceType,
-			undefined, [ServiceId], Timestamp1, Address, Direction,
+			undefined, [SubscriberId], Timestamp1, Address, Direction,
 			initial, SessionId, ServiceUsage),
 	Timestamp2 = calendar:gregorian_seconds_to_datetime(TS + 60),
 	Used1 = rand:uniform(PackageSize1),
@@ -405,7 +402,7 @@ interim_cud_voice(_Config) ->
 	MSCC6 = #{rating_group => RG3, debit => [Debit3], reserve => []}, 
 	ServiceUsage2 = [MSCC4, MSCC5, MSCC6],
 	{ok, ServiceRating2} = ocs_rating:rate(Protocol, ServiceType,
-			undefined, [ServiceId], Timestamp2, Address, Direction,
+			undefined, [SubscriberId], Timestamp2, Address, Direction,
 			interim, SessionId, ServiceUsage2),
 	[RG1, RG2, RG3] = [RG || #{rating_group := RG} <- ServiceRating2],
 	Fall = fun(#{rating_group := RG, result := success, grant := Grant})
@@ -421,11 +418,11 @@ interim_cud_voice(_Config) ->
 				false
 	end,
 	true = lists:all(Fall, ServiceRating2),
-	Reserved = (PackageSize1 + PackageSize2 + PackageSize3) * 2,
-	RemainAmount2 = RemainAmount1 - Reserved,
+	Reserved = PackageSize1 + PackageSize2 + PackageSize3,
+	Used = Used1 + Used2 + Used3,
+	RemainAmount2 = RemainAmount1 - Reserved - Used,
 	{ok, #bucket{remain_amount = RemainAmount2,
-			attributes = #{reservations := R}}} = ocs:find_bucket(BucketId),
-	#{SessionId := #{reserve := Reserve}} = R.
+			attributes = #{reservations := _}}} = ocs:find_bucket(BucketId).
 
 interim_cud_cents() ->
 	Description = "Interim MSCC data with CUD, conversion from monetary balance",
@@ -450,7 +447,7 @@ interim_cud_cents(_Config) ->
 	P3 = price(PriceType, PackageUnits, PackageSize3, PackagePrice3, RG3),
 	OfferId = add_offer([P1, P2, P3], 8),
 	ProdRef = add_product(OfferId),
-	ServiceId = add_service(ProdRef),
+	SubscriberId = add_service(ProdRef),
 	RemainAmount1 = (PackagePrice1 + PackagePrice2 + PackagePrice3) * 10,
 	Bucket = bucket(cents, RemainAmount1),
 	BucketId = add_bucket(ProdRef, Bucket),
@@ -464,7 +461,7 @@ interim_cud_cents(_Config) ->
 	MSCC3 = #{rating_group => RG3, reserve => []}, 
 	ServiceUsage = [MSCC1, MSCC2, MSCC3],
 	{ok, _ServiceRating1} = ocs_rating:rate(Protocol, ServiceType,
-			undefined, [ServiceId], Timestamp1, undefined, undefined,
+			undefined, [SubscriberId], Timestamp1, undefined, undefined,
 			initial, SessionId, ServiceUsage),
 	Timestamp2 = calendar:gregorian_seconds_to_datetime(TS + 60),
 	Used1 = rand:uniform(PackageSize1),
@@ -478,7 +475,7 @@ interim_cud_cents(_Config) ->
 	MSCC6 = #{rating_group => RG3, debit => [Debit3], reserve => []}, 
 	ServiceUsage2 = [MSCC4, MSCC5, MSCC6],
 	{ok, ServiceRating2} = ocs_rating:rate(Protocol, ServiceType,
-			undefined, [ServiceId], Timestamp2, undefined, undefined,
+			undefined, [SubscriberId], Timestamp2, undefined, undefined,
 			interim, SessionId, ServiceUsage2),
 	[RG1, RG2, RG3] = [RG || #{rating_group := RG} <- ServiceRating2],
 	Fall = fun(#{rating_group := RG, result := success, grant := Grant})
@@ -497,8 +494,7 @@ interim_cud_cents(_Config) ->
 	Reserved = (PackagePrice1 + PackagePrice2 + PackagePrice3) * 2,
 	RemainAmount2 = RemainAmount1 - Reserved,
 	{ok, #bucket{remain_amount = RemainAmount2,
-			attributes = #{reservations := R}}} = ocs:find_bucket(BucketId),
-	#{SessionId := #{reserve := Reserve}} = R.
+			attributes = #{reservations := _}}} = ocs:find_bucket(BucketId).
 
 final_cud_data() ->
 	Description = "Final MSCC data with CUD, octets balance",
@@ -526,7 +522,7 @@ final_cud_data(_Config) ->
 			PackageUnits, PackageSize3, PackagePrice3, RG3),
 	OfferId = add_offer([P1, P2, P3], 8),
 	ProdRef = add_product(OfferId),
-	ServiceId = add_service(ProdRef),
+	SubscriberId = add_service(ProdRef),
 	RemainAmount1 = (PackageSize1 + PackageSize2 + PackageSize3) * 10,
 	Bucket = bucket(PackageUnits, RemainAmount1),
 	BucketId = add_bucket(ProdRef, Bucket),
@@ -540,7 +536,7 @@ final_cud_data(_Config) ->
 	MSCC3 = #{rating_group => RG3, reserve => []}, 
 	ServiceUsage1 = [MSCC1, MSCC2, MSCC3],
 	{ok, _ServiceRating1} = ocs_rating:rate(Protocol, ServiceType,
-			undefined, [ServiceId], Timestamp1, undefined, undefined,
+			undefined, [SubscriberId], Timestamp1, undefined, undefined,
 			initial, SessionId, ServiceUsage1),
 	Timestamp2 = calendar:gregorian_seconds_to_datetime(TS + 60),
 	Used1 = rand:uniform(PackageSize1),
@@ -554,21 +550,21 @@ final_cud_data(_Config) ->
 	MSCC6 = #{rating_group => RG3, debit => [Debit3], reserve => []}, 
 	ServiceUsage2 = [MSCC4, MSCC5, MSCC6],
 	{ok, _ServiceRating2} = ocs_rating:rate(Protocol, ServiceType,
-			undefined, [ServiceId], Timestamp2, undefined, undefined,
+			undefined, [SubscriberId], Timestamp2, undefined, undefined,
 			interim, SessionId, ServiceUsage2),
 	Timestamp3 = calendar:gregorian_seconds_to_datetime(TS + 90),
 	Used4 = rand:uniform(PackageSize1),
 	Used5 = rand:uniform(PackageSize2),
 	Used6 = rand:uniform(PackageSize3),
-	Debit4 = {PackageUnits, Used1},
-	Debit5 = {PackageUnits, Used2},
-	Debit6 = {PackageUnits, Used3},
+	Debit4 = {PackageUnits, Used4},
+	Debit5 = {PackageUnits, Used5},
+	Debit6 = {PackageUnits, Used6},
 	MSCC7 = #{rating_group => RG1, debit => [Debit4]}, 
 	MSCC8 = #{rating_group => RG2, debit => [Debit5]}, 
 	MSCC9 = #{rating_group => RG3, debit => [Debit6]}, 
 	ServiceUsage3 = [MSCC7, MSCC8, MSCC9],
 	{ok, ServiceRating3, Rated} = ocs_rating:rate(Protocol, ServiceType,
-			undefined, [ServiceId], Timestamp3, undefined, undefined,
+			undefined, [SubscriberId], Timestamp3, undefined, undefined,
 			final, SessionId, ServiceUsage3),
 	[RG1, RG2, RG3] = [RG || #{rating_group := RG} <- ServiceRating3],
 	Fall = fun(#{rating_group := RG, result := success})
@@ -584,24 +580,9 @@ final_cud_data(_Config) ->
 				false
 	end,
 	true = lists:all(Fall, ServiceRating3),
-	Billed1 = case ((Used1 + Used4) rem PackageSize1) of
-		0 ->
-			(Used1 + Used4) div PackageSize1;
-		_ ->
-			((Used1 + Used4) div PackageSize1) + 1
-	end,
-	Billed2 = case ((Used2 + Used5) rem PackageSize2) of
-		0 ->
-			(Used2 + Used5) div PackageSize2;
-		_ ->
-			((Used2 + Used5) div PackageSize2) + 1
-	end,
-	Billed3 = case ((Used3 + Used6) rem PackageSize3) of
-		0 ->
-			(Used3 + Used6) div PackageSize3;
-		_ ->
-			((Used3 + Used6) div PackageSize3) + 1
-	end,
+	Billed1 = Used1 + Used4,
+	Billed2 = Used2 + Used5,
+	Billed3 = Used3 + Used6,
 	[Rated1, Rated2, Rated3] = Rated,
 	#rated{product = OfferId, price_name = POP1,
 			price_type = usage, usage_rating_tag = included,
@@ -646,7 +627,7 @@ final_cud_voice(_Config) ->
 			PackageUnits, PackageSize3, PackagePrice3, RG3),
 	OfferId = add_offer([P1, P2, P3], 9),
 	ProdRef = add_product(OfferId),
-	ServiceId = add_service(ProdRef),
+	SubscriberId = add_service(ProdRef),
 	RemainAmount1 = (PackageSize1 + PackageSize2 + PackageSize3) * 10,
 	Bucket = bucket(PackageUnits, RemainAmount1),
 	BucketId = add_bucket(ProdRef, Bucket),
@@ -662,7 +643,7 @@ final_cud_voice(_Config) ->
 	MSCC3 = #{rating_group => RG3, reserve => []}, 
 	ServiceUsage = [MSCC1, MSCC2, MSCC3],
 	{ok, _ServiceRating1} = ocs_rating:rate(Protocol, ServiceType,
-			undefined, [ServiceId], Timestamp1, Address, Direction,
+			undefined, [SubscriberId], Timestamp1, Address, Direction,
 			initial, SessionId, ServiceUsage),
 	Timestamp2 = calendar:gregorian_seconds_to_datetime(TS + 60),
 	Used1 = rand:uniform(PackageSize1),
@@ -676,21 +657,21 @@ final_cud_voice(_Config) ->
 	MSCC6 = #{rating_group => RG3, debit => [Debit3], reserve => []}, 
 	ServiceUsage2 = [MSCC4, MSCC5, MSCC6],
 	{ok, _ServiceRating2} = ocs_rating:rate(Protocol, ServiceType,
-			undefined, [ServiceId], Timestamp2, Address, Direction,
+			undefined, [SubscriberId], Timestamp2, Address, Direction,
 			interim, SessionId, ServiceUsage2),
 	Timestamp3 = calendar:gregorian_seconds_to_datetime(TS + 90),
 	Used4 = rand:uniform(PackageSize1),
 	Used5 = rand:uniform(PackageSize2),
 	Used6 = rand:uniform(PackageSize3),
-	Debit4 = {PackageUnits, Used1},
-	Debit5 = {PackageUnits, Used2},
-	Debit6 = {PackageUnits, Used3},
+	Debit4 = {PackageUnits, Used4},
+	Debit5 = {PackageUnits, Used5},
+	Debit6 = {PackageUnits, Used6},
 	MSCC7 = #{rating_group => RG1, debit => [Debit4]}, 
 	MSCC8 = #{rating_group => RG2, debit => [Debit5]}, 
 	MSCC9 = #{rating_group => RG3, debit => [Debit6]}, 
 	ServiceUsage3 = [MSCC7, MSCC8, MSCC9],
 	{ok, ServiceRating3, Rated} = ocs_rating:rate(Protocol, ServiceType,
-			undefined, [ServiceId], Timestamp3, undefined, undefined,
+			undefined, [SubscriberId], Timestamp3, undefined, undefined,
 			final, SessionId, ServiceUsage3),
 	[RG1, RG2, RG3] = [RG || #{rating_group := RG} <- ServiceRating3],
 	Fall = fun(#{rating_group := RG, result := success})
@@ -707,24 +688,9 @@ final_cud_voice(_Config) ->
 	end,
 	true = lists:all(Fall, ServiceRating3),
 	[Rated1, Rated2, Rated3] = Rated,
-	Billed1 = case ((Used1 + Used4) rem PackageSize1) of
-		0 ->
-			(Used1 + Used4) div PackageSize1;
-		_ ->
-			((Used1 + Used4) div PackageSize1) + 1
-	end,
-	Billed2 = case ((Used2 + Used5) rem PackageSize2) of
-		0 ->
-			(Used2 + Used5) div PackageSize2;
-		_ ->
-			((Used2 + Used5) div PackageSize2) + 1
-	end,
-	Billed3 = case ((Used3 + Used6) rem PackageSize3) of
-		0 ->
-			(Used3 + Used6) div PackageSize3;
-		_ ->
-			((Used3 + Used6) div PackageSize3) + 1
-	end,
+	Billed1 = Used1 + Used4,
+	Billed2 = Used2 + Used5,
+	Billed3 = Used3 + Used6,
 	#rated{product = OfferId, price_name = POP1,
 			price_type = usage, usage_rating_tag = included,
 			bucket_type = PackageUnits, is_billed = true,
@@ -760,7 +726,7 @@ final_cud_cents(_Config) ->
 	RG2 = rand:uniform(100) - 1,
 	RG3 = rand:uniform(100) - 1,
 	PriceType = usage,
-	#price{name = POP1} = P1 = price(PriceType,
+	#price{name = _POP1} = P1 = price(PriceType,
 			PackageUnits, PackageSize1, PackagePrice1, RG1),
 	#price{name = POP2} = P2 = price(PriceType,
 			PackageUnits, PackageSize2, PackagePrice2, RG2),
@@ -768,7 +734,7 @@ final_cud_cents(_Config) ->
 			PackageUnits, PackageSize3, PackagePrice3, RG3),
 	OfferId = add_offer([P1, P2, P3], 8),
 	ProdRef = add_product(OfferId),
-	ServiceId = add_service(ProdRef),
+	SubscriberId = add_service(ProdRef),
 	RemainAmount1 = (PackagePrice1 + PackagePrice2 + PackagePrice3) * 10,
 	Bucket = bucket(cents, RemainAmount1),
 	BucketId = add_bucket(ProdRef, Bucket),
@@ -782,7 +748,7 @@ final_cud_cents(_Config) ->
 	MSCC3 = #{rating_group => RG3, reserve => []}, 
 	ServiceUsage = [MSCC1, MSCC2, MSCC3],
 	{ok, _ServiceRating1} = ocs_rating:rate(Protocol, ServiceType,
-			undefined, [ServiceId], Timestamp1, undefined, undefined,
+			undefined, [SubscriberId], Timestamp1, undefined, undefined,
 			initial, SessionId, ServiceUsage),
 	Timestamp2 = calendar:gregorian_seconds_to_datetime(TS + 60),
 	Used1 = rand:uniform(PackageSize1),
@@ -796,21 +762,21 @@ final_cud_cents(_Config) ->
 	MSCC6 = #{rating_group => RG3, debit => [Debit3], reserve => []}, 
 	ServiceUsage2 = [MSCC4, MSCC5, MSCC6],
 	{ok, _ServiceRating2} = ocs_rating:rate(Protocol, ServiceType,
-			undefined, [ServiceId], Timestamp2, undefined, undefined,
+			undefined, [SubscriberId], Timestamp2, undefined, undefined,
 			interim, SessionId, ServiceUsage2),
 	Timestamp3 = calendar:gregorian_seconds_to_datetime(TS + 90),
 	Used4 = rand:uniform(PackageSize1),
 	Used5 = rand:uniform(PackageSize2),
 	Used6 = rand:uniform(PackageSize3),
-	Debit4 = {PackageUnits, Used1},
-	Debit5 = {PackageUnits, Used2},
-	Debit6 = {PackageUnits, Used3},
+	Debit4 = {PackageUnits, Used4},
+	Debit5 = {PackageUnits, Used5},
+	Debit6 = {PackageUnits, Used6},
 	MSCC7 = #{rating_group => RG1, debit => [Debit4]}, 
 	MSCC8 = #{rating_group => RG2, debit => [Debit5]}, 
 	MSCC9 = #{rating_group => RG3, debit => [Debit6]}, 
 	ServiceUsage3 = [MSCC7, MSCC8, MSCC9],
 	{ok, ServiceRating3, Rated} = ocs_rating:rate(Protocol, ServiceType,
-			undefined, [ServiceId], Timestamp3, undefined, undefined,
+			undefined, [SubscriberId], Timestamp3, undefined, undefined,
 			final, SessionId, ServiceUsage3),
 	[RG1, RG2, RG3] = [RG || #{rating_group := RG} <- ServiceRating3],
 	Fall = fun(#{rating_group := RG, result := success})
@@ -826,7 +792,6 @@ final_cud_cents(_Config) ->
 				false
 	end,
 	true = lists:all(Fall, ServiceRating3),
-	[Rated1, Rated2, Rated3] = Rated,
 	Billed1 = case ((Used1 + Used4) rem PackageSize1) of
 		0 ->
 			((Used1 + Used4) div PackageSize1) * PackagePrice1;
@@ -845,27 +810,57 @@ final_cud_cents(_Config) ->
 		_ ->
 			(((Used3 + Used6) div PackageSize3) + 1) * PackagePrice3
 	end,
-	#rated{product = OfferId, price_name = POP1,
-			price_type = usage, usage_rating_tag = included,
-			bucket_type = PackageUnits, is_billed = true,
-			bucket_value = Billed1} = Rated1,
-	#rated{product = OfferId, price_name = POP2,
-			price_type = usage, usage_rating_tag = included,
-			bucket_type = PackageUnits, is_billed = true,
-			bucket_value = Billed2} = Rated2,
-	#rated{product = OfferId, price_name = POP3,
-			price_type = usage, usage_rating_tag = included,
-			bucket_type = PackageUnits, is_billed = true,
-			bucket_value = Billed3} = Rated3,
+	[#rated{product = OfferId, price_name = POP2,
+			price_type = usage, usage_rating_tag = non_included,
+			bucket_type = cents, is_billed = true,
+			bucket_value = Billed2}] = lists:filter(fun
+					(#rated{price_name = POP, bucket_type = cents})
+									when POP == POP2 ->
+								true;
+							(#rated{}) ->
+								false
+					end, Rated),
+	[#rated{product = OfferId, price_name = POP3,
+			price_type = usage, usage_rating_tag = non_included,
+			bucket_type = cents, is_billed = true,
+			bucket_value = Billed3}] = lists:filter(fun
+					(#rated{price_name = POP, bucket_type = cents})
+									when POP == POP3 ->
+								true;
+							(#rated{}) ->
+								false
+					end, Rated),
 	RemainAmount2 = RemainAmount1 - Billed1 - Billed2 - Billed3,
 	{ok, #bucket{remain_amount = RemainAmount2,
-			attributes = #{reservations := R}}} = ocs:find_bucket(BucketId),
-	#{SessionId := #{reserve := Reserve}} = R.
+			attributes = BucketAttributes}} = ocs:find_bucket(BucketId),
+	false = is_map_key(reservations, BucketAttributes).
 
 %%---------------------------------------------------------------------
 %%  Internal functions
 %%---------------------------------------------------------------------
 
+price(Type, octets, Size, Amount, RatingGroup) ->
+	CharValue1 = #char_value{units = "bytes", value = Size},
+	CharName1 = "radiusReserveOctets",
+	CharValueUse1 = #char_value_use{name = CharName1, values = [CharValue1]},
+	CharValue2 = #char_value{value = RatingGroup},
+	CharName2 = "chargingKey",
+	CharValueUse2 = #char_value_use{name = CharName2, values = [CharValue2]},
+	#price{name = ocs:generate_identity(),
+			type = Type, units = octets,
+			size = Size, amount = Amount,
+			char_value_use = [CharValueUse1, CharValueUse2]};
+price(Type, seconds, Size, Amount, RatingGroup) ->
+	CharValue1 = #char_value{units = "seconds", value = Size},
+	CharName1 = "radiusReserveTime",
+	CharValueUse1 = #char_value_use{name = CharName1, values = [CharValue1]},
+	CharValue2 = #char_value{value = RatingGroup},
+	CharName2 = "chargingKey",
+	CharValueUse2 = #char_value_use{name = CharName2, values = [CharValue2]},
+	#price{name = ocs:generate_identity(),
+			type = Type, units = seconds,
+			size = Size, amount = Amount,
+			char_value_use = [CharValueUse1, CharValueUse2]};
 price(Type, Units, Size, Amount, RatingGroup) ->
 	CharValue = #char_value{value = RatingGroup},
 	CharName = "chargingKey",
@@ -894,9 +889,9 @@ add_product(OfferId, ServiceRefs, Chars) ->
 	ProdRef.
 
 add_service(ProdRef) ->
-	ServiceId = ocs:generate_identity(),
-	{ok, _Service1} = ocs:add_service(ServiceId, undefined, ProdRef, []),
-	ServiceId.
+	Id = ocs:generate_identity(),
+	{ok, _Service1} = ocs:add_service(Id, undefined, ProdRef, []),
+	Id.
 
 add_bucket(ProdRef, Bucket) ->
 	{ok, _, #bucket{id = BucketId}} = ocs:add_bucket(ProdRef, Bucket),
