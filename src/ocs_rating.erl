@@ -230,9 +230,15 @@ rate_mscc(Protocol, ServiceType, ServiceNetwork,
 	DebitAmounts = maps:get(debit, H, []),
 	ReserveAmounts = maps:get(reserve, H, undefined),
 	ServiceRating = maps:with([rating_group, service_id], H),
+	SessionId1 = case ChargingKey of
+		RG when is_integer(RG) ->
+			SessionId ++ [{rg, RG}];
+		undefined ->
+			SessionId
+	end,
 	case rate2(Protocol, Enabled, ServiceId, Product, NewBuckets,
 			Timestamp, Address, Direction, Offer, Flag,
-			DebitAmounts, ReserveAmounts, ServiceType, SessionId,
+			DebitAmounts, ReserveAmounts, ServiceType, SessionId1,
 			ChargingKey, ServiceNetwork) of
 		{ok, Granted, Rated, NextBuckets} ->
 			AccRating1 = [ServiceRating#{result => success,
