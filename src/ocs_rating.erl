@@ -30,7 +30,7 @@
 -include_lib("radius/include/radius.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
--export_type([mscc_amount/0, mscc_usage/0, mscc_result/0]).
+-export_type([mscc_usage/0, mscc_result/0]).
 
 -type mscc_amount() ::
 		{UnitType :: octets | seconds | messages, Amount :: non_neg_integer()}.
@@ -96,9 +96,10 @@
 				| service_not_found
 				| invalid_service_type
 				| invalid_bundle_product
-				| out_of_credit
+				| quota_limit_reached
 				| end_user_service_denied
 				| end_user_service_rejected
+				| rating_failed
 				| user_unknown
 				| term().
 %% @doc Rating and charging of multiple services.
@@ -185,7 +186,7 @@ rate(Protocol, ServiceType, ServiceNetwork, SubscriberIDs,
 						F(T)
 				end;
 			F([]) ->
-				mnesia:abort(service_not_found)
+				mnesia:abort(user_unknown)
 	end,
 	case mnesia:transaction(F, [SubscriberIDs], infinity) of
 		{atomic, {ok, ServiceRating, [] = _Rated,
