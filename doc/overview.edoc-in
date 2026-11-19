@@ -722,7 +722,12 @@ Rating configuration options:
 	<dt>quota_per_upf</dt>
 		<dd>5G data connectivity charging manages a quota for each UPF. (default: true)</dd>
 	<dt>sticky_locks</dt>
-		<dd>. (default: #{service => true, bucket => true})</dd>
+		<dd>Sticky write locks optimise for repeated transactions on the
+				same node. With session affinity, rather than load balancing
+				every transaction, sticky write locks avoid the overhead of
+				locking at other nodes. The number of locks held may however
+				become a performance bound.
+				(default: #{service => true, bucket => true})</dd>
 </dl>
 
 ===Log Configuration===
