@@ -39,6 +39,9 @@
 		service_id => 0..4294967295,
 		debit => [mscc_amount()],
 		reserve => [mscc_amount()]}.
+-type fui() :: #{
+		action := terminate | redirect,
+		server => string()}.
 -type mscc_result() :: #{
 		result := success
 				| quota_limit_reached
@@ -49,6 +52,7 @@
 		rating_group => 0..4294967295,
 		service_id => 0..4294967295,
 		grant => [mscc_amount()],
+		fui => fui(),
 		price => #price{}}.
 -type bucket() :: #bucket{}.
 
@@ -223,7 +227,8 @@ rate_mscc(Protocol, ServiceType, ServiceNetwork, Timestamp,
 rate_mscc(Protocol, ServiceType, ServiceNetwork,
 		Timestamp, Address, Direction, Flag, SessionId,
 		#service{enabled = Enabled} = Service,
-		Offer, Product, Buckets, NewBuckets,
+		#offer{char_value_use = CharValueUse} = Offer,
+		Product, Buckets, NewBuckets,
 		[H | T] = _ServiceUsage,
 		AccRating, AccRated, Reason) ->
 	ServiceId = maps:get(service_id, H, undefined),
@@ -250,8 +255,16 @@ rate_mscc(Protocol, ServiceType, ServiceNetwork,
 					Service, Offer, Product, Buckets, NextBuckets,
 					T, AccRating1, AccRated1, Reason);
 		{out_of_credit, Rated, NextBuckets} ->
-			AccRating1 = [ServiceRating#{result => quota_limit_reached}
-					| AccRating],
+			ServiceRating1 = case lists:keyfind("redirectServer",
+					#char_value_use.name, CharValueUse) of
+				#char_value_use{values = [#char_value{value = RedirectServer}]}
+							when is_list(RedirectServer) ->
+						FUI = #{action => terminate, server => RedirectServer},
+						ServiceRating#{result => quota_limit_reached, fui => FUI};
+					_ ->
+						ServiceRating#{result => quota_limit_reached}
+			end,
+			AccRating1 = [ServiceRating1 | AccRating],
 			AccRated1 = [Rated | AccRated],
 			rate_mscc(Protocol, ServiceType, ServiceNetwork,
 					Timestamp, Address, Direction, Flag, SessionId,

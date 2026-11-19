@@ -923,7 +923,14 @@ service_rating(ServiceRating) ->
 %% @hidden
 service_rating([H | T], Acc) ->
 	MSCC = mscc_gsu(H, mscc_si(H, mscc_rg(H, mscc_rc(H)))),
-	service_rating(T, [MSCC | Acc]);
+	case maps:find(fui, H) of
+		{ok, #{server := RedirectServer}} ->
+			MSCC1 = MSCC#'3gpp_ro_Multiple-Services-Credit-Control'{
+					'Final-Unit-Indication' = fui(RedirectServer)},
+			service_rating(T, [MSCC1 | Acc]);
+		error ->
+			service_rating(T, [MSCC | Acc])
+	end;
 service_rating([], Acc) ->
 	lists:reverse(Acc).
 
@@ -1038,7 +1045,6 @@ mscc_gsu(#{grant := [{messages, CCSpecUnits}]}, Acc) ->
 mscc_gsu(#{}, Acc) ->
 	Acc.
 
--dialyzer({no_unused, fui/1}).
 -spec fui(RedirectServerAddress) -> Result
 	when
 		RedirectServerAddress :: string(),
