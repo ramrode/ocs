@@ -341,9 +341,9 @@ process_request1(?'3GPP_CC-REQUEST-TYPE_INITIAL_REQUEST' = RequestType,
 		#'3gpp_ro_CCR'{'Multiple-Services-Credit-Control' = MSCC1,
 		'Service-Information' = ServiceInformation,
 		'Service-Context-Id' = SvcContextId,
-		'Event-Timestamp' = EventTimestamp} = Request, SessionId, RequestNum,
-		SubscriberIDs, OHost, _DHost, ORealm, _DRealm, IpAddress, Port,
-		_Config) ->
+		'Event-Timestamp' = EventTimestamp} = Request, SessionId,
+		RequestNum, SubscriberIDs, OHost, _DHost, ORealm, _DRealm,
+		IpAddress, Port, _Config) ->
 	try
 		{Direction, Address} = direction_address(ServiceInformation),
 		ServiceType = service_type(SvcContextId),
@@ -355,26 +355,50 @@ process_request1(?'3GPP_CC-REQUEST-TYPE_INITIAL_REQUEST' = RequestType,
 			_ ->
 				calendar:universal_time()
 		end,
-		Amounts = get_mscc(MSCC1),
 		SessionAttributes = [{'Session-Id', SessionId}],
-		case rate(ServiceType, ServiceNetwork, SubscriberIDs, Timestamp,
-				Address, Direction, initial, SessionAttributes, Amounts) of
-			{MSCC2, ResultCode} when is_list(MSCC2) ->
+		ServiceUsage = service_usage(MSCC1),
+		case ocs_rating:rate(diameter, ServiceType, ServiceNetwork,
+				SubscriberIDs, Timestamp, Address, Direction, initial,
+				SessionAttributes, ServiceUsage) of
+			{ok, ServiceRating} ->
+				F = fun(#{result := quota_limit_reached}) ->
+							true;
+						(#{}) ->
+							false
+				end,
+				ResultCode = case lists:any(F, ServiceRating) of
+					true ->
+						?'DIAMETER_CC_APP_RESULT-CODE_CREDIT_LIMIT_REACHED';
+					false ->
+						?'DIAMETER_BASE_RESULT-CODE_SUCCESS'
+				end,
+				MSCC2 = service_rating(ServiceRating),
 				Reply = diameter_answer(SessionId, MSCC2,
 						ResultCode, OHost, ORealm, RequestType, RequestNum),
 				ok = ocs_log:acct_log(diameter, Server,
 						accounting_event_type(RequestType), Request, Reply, undefined),
 				Reply;
 			{error, Reason} ->
-				error_logger:error_report(["Rating Error",
-						{module, ?MODULE}, {error, Reason},
-						{origin_host, OHost}, {origin_realm, ORealm},
-						{type, accounting_event_type(RequestType)},
-						{subscriber, print_sub(SubscriberIDs)},
-						{address, Address}, {direction, Direction},
-						{amounts, Amounts}]),
-				Reply = diameter_error(SessionId,
-						?'DIAMETER_CC_APP_RESULT-CODE_RATING_FAILED',
+				ResultCode = case Reason of
+					quota_limit_reached ->
+						?'DIAMETER_CC_APP_RESULT-CODE_CREDIT_LIMIT_REACHED';
+					quota_management_not_applicable ->
+						?'DIAMETER_CC_APP_RESULT-CODE_CREDIT_CONTROL_NOT_APPLICABLE';
+					end_user_service_denied ->
+						?'DIAMETER_CC_APP_RESULT-CODE_END_USER_SERVICE_DENIED';
+					user_unknown ->
+						?'DIAMETER_CC_APP_RESULT-CODE_USER_UNKNOWN';
+					_ ->
+						error_logger:error_report(["Rating Error",
+								{module, ?MODULE}, {error, Reason},
+								{origin_host, OHost}, {origin_realm, ORealm},
+								{type, accounting_event_type(RequestType)},
+								{subscriber, print_sub(SubscriberIDs)},
+								{address, Address}, {direction, Direction},
+								{amounts, ServiceUsage}]),
+						?'DIAMETER_CC_APP_RESULT-CODE_RATING_FAILED'
+				end,
+				Reply = diameter_error(SessionId, ResultCode,
 						OHost, ORealm, RequestType, RequestNum),
 				ok = ocs_log:acct_log(diameter, Server,
 						accounting_event_type(RequestType), Request, Reply, undefined),
@@ -407,26 +431,50 @@ process_request1(?'3GPP_CC-REQUEST-TYPE_UPDATE_REQUEST' = RequestType,
 			_ ->
 				calendar:universal_time()
 		end,
-		Amounts = get_mscc(MSCC1),
 		SessionAttributes = [{'Session-Id', SessionId}],
-		case rate(ServiceType, ServiceNetwork, SubscriberIDs, Timestamp,
-				Address, Direction, interim, SessionAttributes, Amounts) of
-			{MSCC2, ResultCode} when is_list(MSCC2) ->
+		ServiceUsage = service_usage(MSCC1),
+		case ocs_rating:rate(diameter, ServiceType, ServiceNetwork,
+				SubscriberIDs, Timestamp, Address, Direction, interim,
+				SessionAttributes, ServiceUsage) of
+			{ok, ServiceRating} ->
+				F = fun(#{result := quota_limit_reached}) ->
+							true;
+						(#{}) ->
+							false
+				end,
+				ResultCode = case lists:any(F, ServiceRating) of
+					true ->
+						?'DIAMETER_CC_APP_RESULT-CODE_CREDIT_LIMIT_REACHED';
+					false ->
+						?'DIAMETER_BASE_RESULT-CODE_SUCCESS'
+				end,
+				MSCC2 = service_rating(ServiceRating),
 				Reply = diameter_answer(SessionId, MSCC2,
 						ResultCode, OHost, ORealm, RequestType, RequestNum),
 				ok = ocs_log:acct_log(diameter, Server,
 						accounting_event_type(RequestType), Request, Reply, undefined),
 				Reply;
 			{error, Reason} ->
-				error_logger:error_report(["Rating Error",
-						{module, ?MODULE}, {error, Reason},
-						{origin_host, OHost}, {origin_realm, ORealm},
-						{type, accounting_event_type(RequestType)},
-						{subscriber, print_sub(SubscriberIDs)},
-						{address, Address}, {direction, Direction},
-						{amounts, Amounts}]),
-				Reply = diameter_error(SessionId,
-						?'DIAMETER_CC_APP_RESULT-CODE_RATING_FAILED',
+				ResultCode = case Reason of
+					quota_limit_reached ->
+						?'DIAMETER_CC_APP_RESULT-CODE_CREDIT_LIMIT_REACHED';
+					quota_management_not_applicable ->
+						?'DIAMETER_CC_APP_RESULT-CODE_CREDIT_CONTROL_NOT_APPLICABLE';
+					end_user_service_denied ->
+						?'DIAMETER_CC_APP_RESULT-CODE_END_USER_SERVICE_DENIED';
+					user_unknown ->
+						?'DIAMETER_CC_APP_RESULT-CODE_USER_UNKNOWN';
+					_ ->
+						error_logger:error_report(["Rating Error",
+								{module, ?MODULE}, {error, Reason},
+								{origin_host, OHost}, {origin_realm, ORealm},
+								{type, accounting_event_type(RequestType)},
+								{subscriber, print_sub(SubscriberIDs)},
+								{address, Address}, {direction, Direction},
+								{amounts, ServiceUsage}]),
+						?'DIAMETER_CC_APP_RESULT-CODE_RATING_FAILED'
+				end,
+				Reply = diameter_error(SessionId, ResultCode,
 						OHost, ORealm, RequestType, RequestNum),
 				ok = ocs_log:acct_log(diameter, Server,
 						accounting_event_type(RequestType), Request, Reply, undefined),
@@ -459,44 +507,56 @@ process_request1(?'3GPP_CC-REQUEST-TYPE_TERMINATION_REQUEST' = RequestType,
 			_ ->
 				calendar:universal_time()
 		end,
-		case get_mscc(MSCC1) of
-			[] ->
-				ResultCode = ?'DIAMETER_BASE_RESULT-CODE_SUCCESS',
-				Reply = diameter_answer(SessionId, [],
+		SessionAttributes = [{'Session-Id', SessionId}],
+		ServiceUsage = service_usage(MSCC1),
+		case ocs_rating:rate(diameter, ServiceType, ServiceNetwork,
+				SubscriberIDs, Timestamp, Address, Direction, final,
+				SessionAttributes, ServiceUsage) of
+			{ok, ServiceRating, Rated} ->
+				F = fun(#{result := quota_limit_reached}) ->
+							true;
+						(#{}) ->
+							false
+				end,
+				ResultCode = case lists:any(F, ServiceRating) of
+					true ->
+						?'DIAMETER_CC_APP_RESULT-CODE_CREDIT_LIMIT_REACHED';
+					false ->
+						?'DIAMETER_BASE_RESULT-CODE_SUCCESS'
+				end,
+				MSCC2 = service_rating(ServiceRating),
+				Reply = diameter_answer(SessionId, MSCC2,
 						ResultCode, OHost, ORealm, RequestType, RequestNum),
 				ok = ocs_log:acct_log(diameter, Server,
-						accounting_event_type(RequestType), Request, Reply, undefined),
+						accounting_event_type(RequestType), Request, Reply, Rated),
 				Reply;
-			Amounts ->
-				SessionAttributes = [{'Session-Id', SessionId}],
-				case rate(ServiceType, ServiceNetwork, SubscriberIDs, Timestamp,
-							Address, Direction, final, SessionAttributes, Amounts) of
-					{MSCC2, ResultCode} when is_list(MSCC2) ->
-						Reply = diameter_answer(SessionId, MSCC2,
-								ResultCode, OHost, ORealm, RequestType, RequestNum),
-						ok = ocs_log:acct_log(diameter, Server,
-								accounting_event_type(RequestType), Request, Reply, undefined),
-						Reply;
-					{MSCC2, ResultCode, Rated} when is_list(Rated) ->
-						Reply = diameter_answer(SessionId, MSCC2,
-								ResultCode, OHost, ORealm, RequestType, RequestNum),
-						ok = ocs_log:acct_log(diameter, Server,
-								accounting_event_type(RequestType), Request, Reply, Rated),
-						Reply;
-					{error, Reason} ->
+			ErrorResult when element(1, ErrorResult) == error ->
+				ResultCode = case element(2, ErrorResult) of
+					end_user_service_denied ->
+						?'DIAMETER_CC_APP_RESULT-CODE_END_USER_SERVICE_DENIED';
+					user_unknown ->
+						?'DIAMETER_CC_APP_RESULT-CODE_USER_UNKNOWN';
+					Reason ->
 						error_logger:error_report(["Rating Error",
 								{module, ?MODULE}, {error, Reason},
 								{origin_host, OHost}, {origin_realm, ORealm},
 								{type, accounting_event_type(RequestType)},
 								{subscriber, print_sub(SubscriberIDs)},
 								{address, Address}, {direction, Direction},
-								{amounts, Amounts}]),
-						Reply = diameter_error(SessionId, ?'DIAMETER_CC_APP_RESULT-CODE_RATING_FAILED',
-								OHost, ORealm, RequestType, RequestNum),
-						ok = ocs_log:acct_log(diameter, Server,
-								accounting_event_type(RequestType), Request, Reply, undefined),
-						Reply
-				end
+								{amounts, ServiceUsage}]),
+						?'DIAMETER_CC_APP_RESULT-CODE_RATING_FAILED'
+				end,
+				Reply = diameter_error(SessionId, ResultCode,
+						OHost, ORealm, RequestType, RequestNum),
+				Rated = case tuple_size(ErrorResult) of
+					3 ->
+						element(3, ErrorResult);
+					2 ->
+						undefined
+				end,
+				ok = ocs_log:acct_log(diameter, Server,
+						accounting_event_type(RequestType), Request, Reply, Rated),
+				Reply
 		end
 	catch
 		?CATCH_STACK ->
@@ -626,34 +686,55 @@ process_request1(?'3GPP_CC-REQUEST-TYPE_EVENT_REQUEST' = RequestType,
 			_ ->
 				calendar:universal_time()
 		end,
-		Amounts = get_mscc(MSCC1),
 		SessionAttributes = [{'Session-Id', SessionId}],
-		case rate(ServiceType, ServiceNetwork, SubscriberIDs, Timestamp,
-				Address, Direction, event, SessionAttributes, Amounts) of
-			{MSCC2, ResultCode} when is_list(MSCC2) ->
-				Reply = diameter_answer(SessionId, MSCC2,
-						ResultCode, OHost, ORealm, RequestType, RequestNum),
-				ok = ocs_log:acct_log(diameter, Server,
-						accounting_event_type(RequestType), Request, Reply, undefined),
-				Reply;
-			{MSCC2, ResultCode, Rated} when is_list(Rated) ->
+		ServiceUsage = service_usage(MSCC1),
+		case ocs_rating:rate(diameter, ServiceType, ServiceNetwork,
+				SubscriberIDs, Timestamp, Address, Direction, event,
+				SessionAttributes, ServiceUsage) of
+			{ok, ServiceRating, Rated} ->
+				F = fun(#{result := quota_limit_reached}) ->
+							true;
+						(#{}) ->
+							false
+				end,
+				ResultCode = case lists:any(F, ServiceRating) of
+					true ->
+						?'DIAMETER_CC_APP_RESULT-CODE_CREDIT_LIMIT_REACHED';
+					false ->
+						?'DIAMETER_BASE_RESULT-CODE_SUCCESS'
+				end,
+				MSCC2 = service_rating(ServiceRating),
 				Reply = diameter_answer(SessionId, MSCC2,
 						ResultCode, OHost, ORealm, RequestType, RequestNum),
 				ok = ocs_log:acct_log(diameter, Server,
 						accounting_event_type(RequestType), Request, Reply, Rated),
 				Reply;
-			{error, Reason} ->
-				error_logger:error_report(["Rating Error",
-						{module, ?MODULE}, {error, Reason},
-						{origin_host, OHost}, {origin_realm, ORealm},
-						{type, accounting_event_type(RequestType)},
-						{subscriber, print_sub(SubscriberIDs)},
-						{address, Address}, {direction, Direction},
-						{amounts, Amounts}]),
-				Reply = diameter_error(SessionId, ?'DIAMETER_CC_APP_RESULT-CODE_RATING_FAILED',
+			ErrorResult when element(1, ErrorResult) == error ->
+				ResultCode = case element(2, ErrorResult) of
+					end_user_service_denied ->
+						?'DIAMETER_CC_APP_RESULT-CODE_END_USER_SERVICE_DENIED';
+					user_unknown ->
+						?'DIAMETER_CC_APP_RESULT-CODE_USER_UNKNOWN';
+					Reason ->
+						error_logger:error_report(["Rating Error",
+								{module, ?MODULE}, {error, Reason},
+								{origin_host, OHost}, {origin_realm, ORealm},
+								{type, accounting_event_type(RequestType)},
+								{subscriber, print_sub(SubscriberIDs)},
+								{address, Address}, {direction, Direction},
+								{amounts, ServiceUsage}]),
+						?'DIAMETER_CC_APP_RESULT-CODE_RATING_FAILED'
+				end,
+				Reply = diameter_error(SessionId, ResultCode,
 						OHost, ORealm, RequestType, RequestNum),
+				Rated = case tuple_size(ErrorResult) of
+					3 ->
+						element(3, ErrorResult);
+					2 ->
+						undefined
+				end,
 				ok = ocs_log:acct_log(diameter, Server,
-						accounting_event_type(RequestType), Request, Reply, undefined),
+						accounting_event_type(RequestType), Request, Reply, Rated),
 				Reply
 		end
 	catch
@@ -816,357 +897,148 @@ access_info1([_ | T]) ->
 access_info1([]) ->
 	[].
 
--spec get_mscc(MSCC) -> Result
+-spec service_usage(MSCC) -> Result
 	when
 		MSCC :: [#'3gpp_ro_Multiple-Services-Credit-Control'{}],
-		Result :: [{ServiceIdentifier, RatingGroup,
-				UsedAmounts, ReserveAmounts}],
-		ServiceIdentifier :: [pos_integer()],
-		RatingGroup :: [pos_integer()],
-		UsedAmounts :: [{Units, pos_integer()}] | undefined,
-		ReserveAmounts :: [{Units, pos_integer()}] | undefined,
-		Units :: octets | seconds | messages.
-%% @doc Parse out the USU and RSU unit amounts from MSCCs.
+		Result :: [ocs_rating:mscc_request()].
+%% @doc CODEC for diameter MSCC request.
 %% @hidden
-get_mscc(MSCC) ->
-	get_mscc(MSCC, []).
+service_usage(MSCC) ->
+	service_usage(MSCC, []).
 %% @hidden
-get_mscc([H | T], Acc) ->
-	Amounts = {get_si(H), get_rg(H), get_usu(H), get_rsu(H)},
-	get_mscc(T, [Amounts | Acc]);
-get_mscc([], Acc) ->
+service_usage([H | T], Acc) ->
+	Amount = mscc_rsu(H, mscc_usu(H, mscc_si(H, mscc_rg(H, #{})))),
+	service_usage(T, [Amount | Acc]);
+service_usage([], Acc) ->
+	lists:reverse(Acc).
+
+-spec service_rating(ServiceRating) -> Result
+	when
+		ServiceRating :: [ocs_rating:mscc_result()],
+		Result :: [#'3gpp_ro_Multiple-Services-Credit-Control'{}].
+%% @doc CODEC for diameter MSCC result.
+%% @hidden
+service_rating(ServiceRating) ->
+	service_rating(ServiceRating, []).
+%% @hidden
+service_rating([H | T], Acc) ->
+	MSCC = mscc_gsu(H, mscc_si(H, mscc_rg(H, mscc_rc(H)))),
+	service_rating(T, [MSCC | Acc]);
+service_rating([], Acc) ->
 	lists:reverse(Acc).
 
 %% @hidden
-get_rsu(#'3gpp_ro_Multiple-Services-Credit-Control'{
-		'Requested-Service-Unit' = [#'3gpp_ro_Requested-Service-Unit'{
-		'CC-Total-Octets' = [CCTotalOctets]}]})
+mscc_rc(ServiceRating) ->
+	mscc_rc(ServiceRating, #'3gpp_ro_Multiple-Services-Credit-Control'{}).
+%% @hidden
+mscc_rc(#{result := success}, Acc) ->
+	RC = ?'DIAMETER_BASE_RESULT-CODE_SUCCESS',
+	Acc#'3gpp_ro_Multiple-Services-Credit-Control'{'Result-Code' = [RC]};
+mscc_rc(#{result := quota_limit_reached}, Acc) ->
+	RC = ?'DIAMETER_CC_APP_RESULT-CODE_CREDIT_LIMIT_REACHED',
+	Acc#'3gpp_ro_Multiple-Services-Credit-Control'{'Result-Code' = [RC]};
+mscc_rc(#{result := quota_management_not_applicable}, Acc) ->
+	RC = ?'DIAMETER_CC_APP_RESULT-CODE_CREDIT_CONTROL_NOT_APPLICABLE',
+	Acc#'3gpp_ro_Multiple-Services-Credit-Control'{'Result-Code' = [RC]};
+mscc_rc(#{result := end_user_service_denied}, Acc) ->
+	RC = ?'DIAMETER_CC_APP_RESULT-CODE_END_USER_SERVICE_DENIED',
+	Acc#'3gpp_ro_Multiple-Services-Credit-Control'{'Result-Code' = [RC]};
+mscc_rc(#{result := rating_failed}, Acc) ->
+	RC = ?'DIAMETER_CC_APP_RESULT-CODE_RATING_FAILED',
+	Acc#'3gpp_ro_Multiple-Services-Credit-Control'{'Result-Code' = [RC]}.
+
+%% @hidden
+mscc_rg(#'3gpp_ro_Multiple-Services-Credit-Control'{
+		'Rating-Group' = [RG]}, Acc) when is_integer(RG) ->
+	Acc#{rating_group => RG};
+mscc_rg(#{rating_group := RG}, Acc) ->
+	Acc#'3gpp_ro_Multiple-Services-Credit-Control'{'Rating-Group' = [RG]};
+mscc_rg(_, Acc) ->
+	Acc.
+
+%% @hidden
+mscc_si(#'3gpp_ro_Multiple-Services-Credit-Control'{
+		'Service-Identifier' = [SI]}, Acc) when is_integer(SI) ->
+	Acc#{service_id => SI};
+mscc_si(#{service_id := SI}, Acc) ->
+	Acc#'3gpp_ro_Multiple-Services-Credit-Control'{
+			'Service-Identifier' = [SI]};
+mscc_si(_, Acc) ->
+	Acc.
+
+%% @hidden
+mscc_usu(#'3gpp_ro_Multiple-Services-Credit-Control'{
+		'Used-Service-Unit' = [#'3gpp_ro_Used-Service-Unit'{
+		'CC-Total-Octets' = [CCTotalOctets]} | _]}, Acc)
 		when is_integer(CCTotalOctets), CCTotalOctets > 0 ->
-	[{octets, CCTotalOctets}];
-get_rsu(#'3gpp_ro_Multiple-Services-Credit-Control'{
-		'Requested-Service-Unit' = [#'3gpp_ro_Requested-Service-Unit'{
+	Acc#{debit => [{octets, CCTotalOctets}]};
+mscc_usu(#'3gpp_ro_Multiple-Services-Credit-Control'{
+		'Used-Service-Unit' = [#'3gpp_ro_Used-Service-Unit'{
 		'CC-Output-Octets' = [CCOutputOctets],
-		'CC-Input-Octets' = [CCInputOctets]}]})
+		'CC-Input-Octets' = [CCInputOctets]} | _]}, Acc)
 		when is_integer(CCInputOctets), is_integer(CCOutputOctets),
 		((CCInputOctets > 0) or (CCOutputOctets > 0)) ->
-	[{octets, CCInputOctets + CCOutputOctets}];
-get_rsu(#'3gpp_ro_Multiple-Services-Credit-Control'{
-		'Requested-Service-Unit' = [#'3gpp_ro_Requested-Service-Unit'{
-		'CC-Time' = [CCTime]}]})
+	Acc#{debit => [{octets, CCInputOctets + CCOutputOctets}]};
+mscc_usu(#'3gpp_ro_Multiple-Services-Credit-Control'{
+		'Used-Service-Unit' = [#'3gpp_ro_Used-Service-Unit'{
+		'CC-Time' = [CCTime]} | _]}, Acc)
 		when is_integer(CCTime), CCTime > 0 ->
-	[{seconds, CCTime}];
-get_rsu(#'3gpp_ro_Multiple-Services-Credit-Control'{
-		'Requested-Service-Unit' = [#'3gpp_ro_Requested-Service-Unit'{
-		'CC-Service-Specific-Units' = [CCSpecUnits]}]})
+	Acc#{debit => [{seconds, CCTime}]};
+mscc_usu(#'3gpp_ro_Multiple-Services-Credit-Control'{
+		'Used-Service-Unit' = [#'3gpp_ro_Used-Service-Unit'{
+		'CC-Service-Specific-Units' = [CCSpecUnits]} | _]}, Acc)
 		when is_integer(CCSpecUnits), CCSpecUnits > 0 ->
-	[{messages, CCSpecUnits}];
-get_rsu(#'3gpp_ro_Multiple-Services-Credit-Control'{
-		'Requested-Service-Unit' = [#'3gpp_ro_Requested-Service-Unit'{}]}) ->
-	[];
-get_rsu(#'3gpp_ro_Multiple-Services-Credit-Control'{}) ->
-	undefined.
+	Acc#{debit => [{messages, CCSpecUnits}]};
+mscc_usu(#'3gpp_ro_Multiple-Services-Credit-Control'{
+		'Used-Service-Unit' = _}, Acc) ->
+	Acc.
 
 %% @hidden
-get_usu(#'3gpp_ro_Multiple-Services-Credit-Control'{
-		'Used-Service-Unit' = [#'3gpp_ro_Used-Service-Unit'{
-		'CC-Total-Octets' = [CCTotalOctets]} | _]})
+mscc_rsu(#'3gpp_ro_Multiple-Services-Credit-Control'{
+		'Requested-Service-Unit' = [#'3gpp_ro_Requested-Service-Unit'{
+		'CC-Total-Octets' = [CCTotalOctets]}]}, Acc)
 		when is_integer(CCTotalOctets), CCTotalOctets > 0 ->
-	[{octets, CCTotalOctets}];
-get_usu(#'3gpp_ro_Multiple-Services-Credit-Control'{
-		'Used-Service-Unit' = [#'3gpp_ro_Used-Service-Unit'{
+	Acc#{reserve => [{octets, CCTotalOctets}]};
+mscc_rsu(#'3gpp_ro_Multiple-Services-Credit-Control'{
+		'Requested-Service-Unit' = [#'3gpp_ro_Requested-Service-Unit'{
 		'CC-Output-Octets' = [CCOutputOctets],
-		'CC-Input-Octets' = [CCInputOctets]} | _]})
+		'CC-Input-Octets' = [CCInputOctets]}]}, Acc)
 		when is_integer(CCInputOctets), is_integer(CCOutputOctets),
 		((CCInputOctets > 0) or (CCOutputOctets > 0)) ->
-	[{octets, CCInputOctets + CCOutputOctets}];
-get_usu(#'3gpp_ro_Multiple-Services-Credit-Control'{
-		'Used-Service-Unit' = [#'3gpp_ro_Used-Service-Unit'{
-		'CC-Time' = [CCTime]} | _]})
+	Acc#{reserve => [{octets, CCInputOctets + CCOutputOctets}]};
+mscc_rsu(#'3gpp_ro_Multiple-Services-Credit-Control'{
+		'Requested-Service-Unit' = [#'3gpp_ro_Requested-Service-Unit'{
+		'CC-Time' = [CCTime]}]}, Acc)
 		when is_integer(CCTime), CCTime > 0 ->
-	[{seconds, CCTime}];
-get_usu(#'3gpp_ro_Multiple-Services-Credit-Control'{
-		'Used-Service-Unit' = [#'3gpp_ro_Used-Service-Unit'{
-		'CC-Service-Specific-Units' = [CCSpecUnits]} | _]})
+	Acc#{reserve => [{seconds, CCTime}]};
+mscc_rsu(#'3gpp_ro_Multiple-Services-Credit-Control'{
+		'Requested-Service-Unit' = [#'3gpp_ro_Requested-Service-Unit'{
+		'CC-Service-Specific-Units' = [CCSpecUnits]}]}, Acc)
 		when is_integer(CCSpecUnits), CCSpecUnits > 0 ->
-	[{messages, CCSpecUnits}];
-get_usu(#'3gpp_ro_Multiple-Services-Credit-Control'{'Used-Service-Unit' = _}) ->
-	[].
+	Acc#{reserve => [{messages, CCSpecUnits}]};
+mscc_rsu(#'3gpp_ro_Multiple-Services-Credit-Control'{
+		'Requested-Service-Unit' = [#'3gpp_ro_Requested-Service-Unit'{}]}, Acc) ->
+	Acc#{reserve => []};
+mscc_rsu(#'3gpp_ro_Multiple-Services-Credit-Control'{}, Acc) ->
+	Acc.
 
 %% @hidden
-get_si(#'3gpp_ro_Multiple-Services-Credit-Control'{'Service-Identifier' = [SI]})
-		when is_integer(SI) ->
-	[SI];
-get_si(_) ->
-	[].
+mscc_gsu(#{grant := [{octets, CCTotalOctets}]}, Acc) ->
+	Acc#'3gpp_ro_Multiple-Services-Credit-Control'{
+		'Granted-Service-Unit' = [#'3gpp_ro_Granted-Service-Unit'{
+		'CC-Total-Octets' = [CCTotalOctets]}]};
+mscc_gsu(#{grant := [{seconds, CCTime}]}, Acc) ->
+	Acc#'3gpp_ro_Multiple-Services-Credit-Control'{
+		'Granted-Service-Unit' = [#'3gpp_ro_Granted-Service-Unit'{
+		'CC-Time' = [CCTime]}]};
+mscc_gsu(#{grant := [{messages, CCSpecUnits}]}, Acc) ->
+	Acc#'3gpp_ro_Multiple-Services-Credit-Control'{
+		'Granted-Service-Unit' = [#'3gpp_ro_Granted-Service-Unit'{
+		'CC-Service-Specific-Units' = [CCSpecUnits]}]};
+mscc_gsu(#{}, Acc) ->
+	Acc.
 
-%% @hidden
-get_rg(#'3gpp_ro_Multiple-Services-Credit-Control'{'Rating-Group' = [RG]})
-		when is_integer(RG) ->
-	[RG];
-get_rg(_) ->
-	[].
-
--spec rate(ServiceType, ServiceNetwork, SubscriberIDs, Timestamp,
-		Address, Direction, Flag, SessionAttributes, Amounts) -> Result
-	when
-		ServiceType :: pos_integer(),
-		ServiceNetwork :: binary(),
-		SubscriberIDs :: [binary()],
-		Timestamp :: calendar:datetime(),
-		Address :: binary() | undefined,
-		Direction :: answer | originate | undefined,
-		Flag :: initial | interim | final | event,
-		SessionAttributes :: [tuple()],
-		Amounts :: [{ServiceIdentifier, RatingGroup,
-				UsedAmounts, ReserveAmounts}],
-		ServiceIdentifier :: [pos_integer()],
-		RatingGroup :: [pos_integer()],
-		UsedAmounts :: [{Units, pos_integer()}],
-		ReserveAmounts :: [{Units, pos_integer()}],
-		Units :: octets | seconds | messages,
-		Result :: {[MSCC], ResultCode} | {[MSCC], ResultCode, Rated}
-				| {error, Reason ::term()},
-		MSCC :: #'3gpp_ro_Multiple-Services-Credit-Control'{},
-		ResultCode :: pos_integer(),
-		Rated :: [#rated{}].
-%% @doc Rate all the MSCCs.
-%% @hidden
-rate(ServiceType, ServiceNetwork, SubscriberIDs, Timestamp,
-		Address, Direction, Flag, SessionAttributes, Amounts)
-		when is_integer(ServiceType) ->
-	rate(ServiceType, ServiceNetwork, SubscriberIDs, Timestamp,
-			Address, Direction, Flag, SessionAttributes,
-			Amounts, [], undefined, undefined).
-%% @hidden
-rate(ServiceType, ServiceNetwork, SubscriberIDs,
-		Timestamp, Address, Direction, Flag, SessionAttributes,
-		[{SI, RG, Debits, Reserves} | T], Acc, ResultCode1, Rated1) ->
-	ServiceId = case SI of
-		[] ->
-			undefined;
-		[N1] ->
-			N1
-	end,
-	{SessionAttributes1, ChargingKey} = case RG of
-		[] ->
-			{SessionAttributes, undefined};
-		[N2] ->
-			{SessionAttributes ++ [{rg, N2}], N2}
-	end,
-	case ocs_rating:rate(diameter, ServiceType, ServiceId, ChargingKey,
-			ServiceNetwork, SubscriberIDs, Timestamp, Address, Direction, Flag,
-			Debits, Reserves, SessionAttributes1) of
-		{ok, _, {seconds, Amount} = _GrantedAmount} when Amount > 0 ->
-			ResultCode2 = ?'DIAMETER_BASE_RESULT-CODE_SUCCESS',
-			GSU = #'3gpp_ro_Granted-Service-Unit'{'CC-Time' = [Amount]},
-			MSCC = #'3gpp_ro_Multiple-Services-Credit-Control'{
-					'Granted-Service-Unit' = [GSU],
-					'Service-Identifier' = SI,
-					'Rating-Group' = RG,
-					'Result-Code' = [ResultCode2]},
-			rate(ServiceType, ServiceNetwork, SubscriberIDs,
-					Timestamp, Address, Direction, Flag, SessionAttributes,
-					T, [MSCC | Acc], ResultCode2, Rated1);
-		{ok, _, {octets, Amount} = _GrantedAmount} when Amount > 0 ->
-			ResultCode2 = ?'DIAMETER_BASE_RESULT-CODE_SUCCESS',
-			GSU = #'3gpp_ro_Granted-Service-Unit'{'CC-Total-Octets' = [Amount]},
-			MSCC = #'3gpp_ro_Multiple-Services-Credit-Control'{
-					'Granted-Service-Unit' = [GSU],
-					'Service-Identifier' = SI,
-					'Rating-Group' = RG,
-					'Result-Code' = [ResultCode2]},
-			rate(ServiceType, ServiceNetwork, SubscriberIDs,
-					Timestamp, Address, Direction, Flag, SessionAttributes,
-					T, [MSCC | Acc], ResultCode2, Rated1);
-		{ok, _, {messages, Amount} = _GrantedAmount} when Amount > 0 ->
-			ResultCode2 = ?'DIAMETER_BASE_RESULT-CODE_SUCCESS',
-			GSU = #'3gpp_ro_Granted-Service-Unit'{'CC-Service-Specific-Units' = [Amount]},
-			MSCC = #'3gpp_ro_Multiple-Services-Credit-Control'{
-					'Granted-Service-Unit' = [GSU],
-					'Service-Identifier' = SI,
-					'Rating-Group' = RG,
-					'Result-Code' = [ResultCode2]},
-			rate(ServiceType, ServiceNetwork, SubscriberIDs,
-					Timestamp, Address, Direction, Flag, SessionAttributes,
-					T, [MSCC | Acc], ResultCode2, Rated1);
-		{ok, _, {_, 0} = _GrantedAmount} ->
-			ResultCode2 = ?'DIAMETER_BASE_RESULT-CODE_SUCCESS',
-			rate(ServiceType, ServiceNetwork, SubscriberIDs,
-					Timestamp, Address, Direction, Flag, SessionAttributes,
-					T, Acc, ResultCode2, Rated1);
-		{ok, _, {octets, Amount}, Rated2} when Amount > 0,
-				is_list(Rated2), Rated1 == undefined ->
-			ResultCode2 = ?'DIAMETER_BASE_RESULT-CODE_SUCCESS',
-			GSU = #'3gpp_ro_Granted-Service-Unit'{'CC-Total-Octets' = [Amount]},
-			MSCC = #'3gpp_ro_Multiple-Services-Credit-Control'{
-					'Granted-Service-Unit' = [GSU],
-					'Service-Identifier' = SI,
-					'Rating-Group' = RG,
-					'Result-Code' = [ResultCode2]},
-			rate(ServiceType, ServiceNetwork, SubscriberIDs,
-					Timestamp, Address, Direction, Flag, SessionAttributes,
-					T, [MSCC | Acc], ResultCode2, Rated2);
-		{ok, _, {octets, Amount}, Rated2} when Amount > 0,
-				is_list(Rated2), is_list(Rated1) ->
-			ResultCode2 = ?'DIAMETER_BASE_RESULT-CODE_SUCCESS',
-			GSU = #'3gpp_ro_Granted-Service-Unit'{'CC-Total-Octets' = [Amount]},
-			MSCC = #'3gpp_ro_Multiple-Services-Credit-Control'{
-					'Granted-Service-Unit' = [GSU],
-					'Service-Identifier' = SI,
-					'Rating-Group' = RG,
-					'Result-Code' = [ResultCode2]},
-			rate(ServiceType, ServiceNetwork, SubscriberIDs,
-					Timestamp, Address, Direction, Flag, SessionAttributes,
-					T, [MSCC | Acc], ResultCode2, Rated1 ++ Rated2);
-		{ok, _, {seconds, Amount}, Rated2} when Amount > 0,
-				is_list(Rated2), Rated1 == undefined ->
-			ResultCode2 = ?'DIAMETER_BASE_RESULT-CODE_SUCCESS',
-			GSU = #'3gpp_ro_Granted-Service-Unit'{'CC-Time' = [Amount]},
-			MSCC = #'3gpp_ro_Multiple-Services-Credit-Control'{
-					'Granted-Service-Unit' = [GSU],
-					'Service-Identifier' = SI,
-					'Rating-Group' = RG,
-					'Result-Code' = [ResultCode2]},
-			rate(ServiceType, ServiceNetwork, SubscriberIDs,
-					Timestamp, Address, Direction, Flag, SessionAttributes,
-					T, [MSCC | Acc], ResultCode2, Rated2);
-		{ok, _, {messages, Amount}, Rated2} when Amount > 0,
-				is_list(Rated2), Rated1 == undefined ->
-			ResultCode2 = ?'DIAMETER_BASE_RESULT-CODE_SUCCESS',
-			GSU = #'3gpp_ro_Granted-Service-Unit'{'CC-Service-Specific-Units' = [Amount]},
-			MSCC = #'3gpp_ro_Multiple-Services-Credit-Control'{
-					'Granted-Service-Unit' = [GSU],
-					'Service-Identifier' = SI,
-					'Rating-Group' = RG,
-					'Result-Code' = [ResultCode2]},
-			rate(ServiceType, ServiceNetwork, SubscriberIDs,
-					Timestamp, Address, Direction, Flag, SessionAttributes,
-					T, [MSCC | Acc], ResultCode2, Rated2);
-		{ok, _, {messages, Amount}, Rated2} when Amount > 0,
-				is_list(Rated2), is_list(Rated1) ->
-			ResultCode2 = ?'DIAMETER_BASE_RESULT-CODE_SUCCESS',
-			GSU = #'3gpp_ro_Granted-Service-Unit'{'CC-Service-Specific-Units' = [Amount]},
-			MSCC = #'3gpp_ro_Multiple-Services-Credit-Control'{
-					'Granted-Service-Unit' = [GSU],
-					'Service-Identifier' = SI,
-					'Rating-Group' = RG,
-					'Result-Code' = [ResultCode2]},
-			rate(ServiceType, ServiceNetwork, SubscriberIDs,
-					Timestamp, Address, Direction, Flag, SessionAttributes,
-					T, [MSCC | Acc], ResultCode2, Rated1 ++ Rated2);
-		{ok, _, Rated2} when is_list(Rated2), Rated1 == undefined ->
-			ResultCode2 = ?'DIAMETER_BASE_RESULT-CODE_SUCCESS',
-			rate(ServiceType, ServiceNetwork, SubscriberIDs,
-					Timestamp, Address, Direction, Flag, SessionAttributes,
-					T, Acc, ResultCode2, Rated2);
-		{ok, _, Rated2} when is_list(Rated2), is_list(Rated1) ->
-			ResultCode2 = ?'DIAMETER_BASE_RESULT-CODE_SUCCESS',
-			rate(ServiceType, ServiceNetwork, SubscriberIDs,
-					Timestamp, Address, Direction, Flag, SessionAttributes,
-					T, Acc, ResultCode2, Rated1 ++ Rated2);
-		{out_of_credit, RedirectServerAddress, _SessionList} ->
-			ResultCode2 = ?'DIAMETER_CC_APP_RESULT-CODE_CREDIT_LIMIT_REACHED',
-			ResultCode3 = case ResultCode1 of
-				undefined->
-					ResultCode2;
-				ResultCode1 ->
-					ResultCode1
-			end,
-			MSCC = case RedirectServerAddress of
-				undefined ->
-					#'3gpp_ro_Multiple-Services-Credit-Control'{
-							'Service-Identifier' = SI,
-							'Rating-Group' = RG,
-							'Result-Code' = [ResultCode3]};
-				RedirectServerAddress when is_list(RedirectServerAddress) ->
-					#'3gpp_ro_Multiple-Services-Credit-Control'{
-							'Service-Identifier' = SI,
-							'Rating-Group' = RG,
-							'Result-Code' = [ResultCode3],
-							'Final-Unit-Indication' = fui(RedirectServerAddress)}
-			end,
-			rate(ServiceType, ServiceNetwork, SubscriberIDs,
-					Timestamp, Address, Direction, Flag, SessionAttributes,
-					T, [MSCC | Acc], ResultCode3, Rated1);
-		{out_of_credit, RedirectServerAddress, _SessionList, Rated2}
-				when is_list(Rated2), Rated1 == undefined ->
-			ResultCode2 = ?'DIAMETER_CC_APP_RESULT-CODE_CREDIT_LIMIT_REACHED',
-			ResultCode3 = case ResultCode1 of
-				undefined ->
-					ResultCode2;
-				ResultCode1 ->
-					ResultCode1
-			end,
-			MSCC = case RedirectServerAddress of
-				undefined ->
-					#'3gpp_ro_Multiple-Services-Credit-Control'{
-							'Service-Identifier' = SI,
-							'Rating-Group' = RG,
-							'Result-Code' = [ResultCode3]};
-				RedirectServerAddress when is_list(RedirectServerAddress) ->
-					#'3gpp_ro_Multiple-Services-Credit-Control'{
-							'Service-Identifier' = SI,
-							'Rating-Group' = RG,
-							'Result-Code' = [ResultCode3],
-							'Final-Unit-Indication' = fui(RedirectServerAddress)}
-			end,
-			rate(ServiceType, ServiceNetwork, SubscriberIDs,
-					Timestamp, Address, Direction, Flag, SessionAttributes,
-					T, [MSCC | Acc], ResultCode3, Rated2);
-		{out_of_credit, RedirectServerAddress, _SessionList, Rated2}
-				when is_list(Rated2), is_list(Rated1) ->
-			ResultCode2 = ?'DIAMETER_CC_APP_RESULT-CODE_CREDIT_LIMIT_REACHED',
-			ResultCode3 = case ResultCode1 of
-				undefined ->
-					ResultCode2;
-				ResultCode1 ->
-					ResultCode1
-			end,
-			MSCC = case RedirectServerAddress of
-				undefined ->
-					#'3gpp_ro_Multiple-Services-Credit-Control'{
-							'Service-Identifier' = SI,
-							'Rating-Group' = RG,
-							'Result-Code' = [ResultCode3]};
-				RedirectServerAddress when is_list(RedirectServerAddress) ->
-					#'3gpp_ro_Multiple-Services-Credit-Control'{
-							'Service-Identifier' = SI,
-							'Rating-Group' = RG,
-							'Result-Code' = [ResultCode3],
-							'Final-Unit-Indication' = fui(RedirectServerAddress)}
-			end,
-			rate(ServiceType, ServiceNetwork, SubscriberIDs,
-					Timestamp, Address, Direction, Flag, SessionAttributes,
-					T, [MSCC | Acc], ResultCode3, Rated1 ++ Rated2);
-		{disabled, _SessionList} ->
-			{Acc, ?'DIAMETER_CC_APP_RESULT-CODE_END_USER_SERVICE_DENIED'};
-		{error, service_not_found} ->
-			{Acc, ?'DIAMETER_CC_APP_RESULT-CODE_USER_UNKNOWN'};
-		{error, Reason} ->
-			{error, Reason}
-	end;
-rate(ServiceType, ServiceNetwork, SubscriberIDs,
-		Timestamp, Address, Direction, final, SessionAttributes,
-		[], [], undefined, undefined) ->
-	case ocs_rating:rate(diameter, ServiceType, undefined, undefined,
-			ServiceNetwork, SubscriberIDs, Timestamp, Address, Direction,
-			final, [], [], SessionAttributes) of
-		{ok, _, Rated} ->
-			{[], ?'DIAMETER_BASE_RESULT-CODE_SUCCESS', Rated};
-		{out_of_credit, _, _SessionList} ->
-			{[], ?'DIAMETER_CC_APP_RESULT-CODE_CREDIT_LIMIT_REACHED', []};
-		{out_of_credit, _, _SessionList, Rated} ->
-			{[], ?'DIAMETER_CC_APP_RESULT-CODE_CREDIT_LIMIT_REACHED', Rated};
-		{disabled, _SessionList} ->
-			{[], ?'DIAMETER_CC_APP_RESULT-CODE_END_USER_SERVICE_DENIED', []};
-		{error, Reason} ->
-			{error, Reason}
-	end;
-rate(_, _, _, _, _, _, _, _, [], Acc, ResultCode, undefined) ->
-	{lists:reverse(Acc), ResultCode};
-rate(_, _, _, _, _, _, _, _, [], Acc, ResultCode, Rated) ->
-	{lists:reverse(Acc), ResultCode, Rated}.
-
+-dialyzer({no_unused, fui/1}).
 -spec fui(RedirectServerAddress) -> Result
 	when
 		RedirectServerAddress :: string(),
