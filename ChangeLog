@@ -1,3 +1,25 @@
+2026-11-19    Vance Shipley <vances@sigscale.org>
+
+	* document sticky_locks app env var
+	* clean_reservation/2 also removes session buckets
+	* support fui redirect server in mscc rating api
+	* port diameter ro callback module to use new mscc rating api
+	* align mscc rating api error results with 5gc chf sbi application
+	* align mscc rating test cases for full passing
+	* add rating-group to session-id in mscc api
+	* public api for single transaction multiple services credit control
+	* html formatting of 3gpp reference in edoc
+	* move side effects from rate2/charge2 to rate1/charge1
+	* remove unused public api, hide internal functions from edoc
+	* rename variables for code literacy clarity
+	* remove migration function parse_buckets/1 for record format deprecated in v3.2.25
+	* application environment variable for disabling mnesia sticky_write locks
+	* use application:get_env/2, not /1
+	* defer converting binary strings to lists
+	* refactor and correct oauth module and test case
+	* correct state() to match state handler callbacks
+	* port gen_fsm:handle_info/3 clauses to gen_statem
+
 2026-10-08    Vance Shipley <vances@sigscale.org>
 
 	* escript for simple auth with diameter nas

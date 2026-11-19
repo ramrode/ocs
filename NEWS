@@ -1,3 +1,9 @@
+November 19, 2026
+-----------------
+	- Single transaction rating of multiple services (MSCC): ocs:rate/10
+	- Application environment variable for disabling sticky_write locks
+	- Remove session buckets also in ocs:clean_reservations/1,2
+
 October 8, 2026
 ---------------
 	- Added escript for simple auth with DIAMETER NAS
