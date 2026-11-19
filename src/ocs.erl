@@ -3169,6 +3169,11 @@ clean_reservations1(Before, Refund, Key)
 	end,
 	Ftrans = fun() ->
 			case mnesia:read(bucket, Key, read) of
+				[#bucket{name = "session",
+						start_date = StartDate, end_date = EndData,
+						last_modified = {LM, _}} = Bucket]
+						when StartDate == EndData, LM < Before ->
+					mnesia:delete_object(Bucket);
 				[#bucket{remain_amount = Remain,
 						attributes = #{reservations
 								:= Reserves} = Attributes} = Bucket] ->
